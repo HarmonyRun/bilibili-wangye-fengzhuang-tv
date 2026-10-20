@@ -103,6 +103,9 @@ public final class PlayerActivity extends Activity {
     private boolean awaitingReady;
     private boolean progressiveFallbackTried;
     private boolean bvFallbackTried;
+    private boolean pendingAutoplayRecommended;
+    private boolean endedHandled;
+    private boolean autoplayLaunching;
     private int speedIndex = 1;
     private final float[] speeds = {.75f, 1f, 1.25f, 1.5f, 2f};
     private long danmakuAnchorPositionMs;
@@ -195,6 +198,7 @@ public final class PlayerActivity extends Activity {
             if (state == Player.STATE_READY) {
                 prepared = true;
                 stateText = "";
+                endedHandled = false;
                 resetDanmakuAnchor();
                 startResumeSaving();
                 if (!initialSeekDone) {
@@ -221,8 +225,9 @@ public final class PlayerActivity extends Activity {
                 stopResumeSaving();
                 clearLocalResume();
                 stopProgressReporting();
-                if (!playNextIfAvailable()) {
-                    controlsVisible = true; menuMode = false; subMenuMode = false;
+                if (!endedHandled) {
+                    endedHandled = true;
+                    handlePlaybackEnded();
                 }
                 overlay.invalidate();
             } else if (state == Player.STATE_BUFFERING) {
@@ -318,6 +323,7 @@ public final class PlayerActivity extends Activity {
 
     @Override protected void onPause() {
         super.onPause();
+        cancelPendingAutoplay();
         activityResumed = false;
         if (player != null && player.isPlaying()) player.pause();
         resetDanmakuAnchor();
@@ -348,6 +354,8 @@ public final class PlayerActivity extends Activity {
     }
 
     private void resolveAndPlay(int quality, int position, boolean readStoredResume) {
+        pendingAutoplayRecommended = false;
+        endedHandled = false;
         saveLocalResume();
         stopResumeSaving();
         stopProgressReporting();
@@ -498,6 +506,8 @@ public final class PlayerActivity extends Activity {
     /** 应用选集：解析目标集、更新 Referer、重载弹幕并从已存进度（或 0）开始播放。 */
     private void switchEpisode(PlaybackRepository.Episode episode, boolean readStoredResume) {
         if (episode == null || destroyed) return;
+        pendingAutoplayRecommended = false;
+        endedHandled = false;
         stopProgressReporting();
         saveLocalResume();
         stopResumeSaving();
@@ -602,6 +612,8 @@ public final class PlayerActivity extends Activity {
     /** 应用分P：解析目标 P、更新 Referer、重载弹幕并从已存进度（或 0）开始播放。 */
     private void switchPart(PlaybackRepository.Part part, boolean readStoredResume) {
         if (part == null || destroyed) return;
+        pendingAutoplayRecommended = false;
+        endedHandled = false;
         stopProgressReporting();
         saveLocalResume();
         stopResumeSaving();
@@ -687,6 +699,7 @@ public final class PlayerActivity extends Activity {
     }
 
     private void openInfoPanel() {
+        cancelPendingAutoplay();
         menuMode = false;
         middleMode = false;
         subMenuMode = false;
@@ -709,6 +722,7 @@ public final class PlayerActivity extends Activity {
     }
 
     private void openFunctionMenu() {
+        cancelPendingAutoplay();
         infoMode = false;
         infoFocusRow = 0;
         middleMode = false;
@@ -722,6 +736,7 @@ public final class PlayerActivity extends Activity {
 
     /** 中间进度条控制区：只高亮进度条，←→ 快退/快进，OK 暂停/继续。 */
     private void openMiddlePanel() {
+        cancelPendingAutoplay();
         menuMode = false;
         subMenuMode = false;
         infoMode = false;
@@ -937,6 +952,17 @@ public final class PlayerActivity extends Activity {
             relatedError = error == null ? "" : error;
             if (infoMode) {
                 rebuildInfoCards();
+            }
+            if (pendingAutoplayRecommended) {
+                pendingAutoplayRecommended = false;
+                if (!destroyed && player != null && player.getPlaybackState() == Player.STATE_ENDED) {
+                    maybeContinueWithRecommended();
+                } else {
+                    stateText = "";
+                    controlsVisible = true;
+                    overlay.invalidate();
+                }
+            } else {
                 overlay.invalidate();
             }
         });
@@ -1032,8 +1058,94 @@ public final class PlayerActivity extends Activity {
         return false;
     }
 
+    /** 播放结束：优先下一集/下一P，否则自动续播相关推荐；直播不续播。 */
+    private void handlePlaybackEnded() {
+        pendingAutoplayRecommended = false;
+        if (destroyed || autoplayLaunching) return;
+        if (!activityResumed) {
+            stateText = "";
+            controlsVisible = true; menuMode = false; subMenuMode = false;
+            return;
+        }
+        if (isLive()) {
+            stateText = "";
+            controlsVisible = true; menuMode = false; subMenuMode = false;
+            return;
+        }
+        if (playNextIfAvailable()) return;
+        maybeContinueWithRecommended();
+    }
+
+    /** 用户接管播放/离开页面时取消等待中的自动续播。 */
+    private void cancelPendingAutoplay() {
+        if (!pendingAutoplayRecommended) return;
+        pendingAutoplayRecommended = false;
+        if (stateText.startsWith("正在寻找下一个视频")) stateText = "";
+        controlsVisible = true;
+        if (overlay != null) overlay.invalidate();
+    }
+
+    /** 预取相关推荐：非直播、有 bvid、且尚未加载/加载中时触发；失败静默。 */
+    private void prefetchRelated() {
+        if (isLive() || stream == null || stream.bvid.isEmpty()) return;
+        if (relatedLoading || !relatedVideos.isEmpty() || !relatedError.isEmpty()) return;
+        loadInfoRelated(stream.bvid);
+    }
+
+    private void maybeContinueWithRecommended() {
+        if (destroyed || autoplayLaunching || isLive()) return;
+        VideoItem next = firstPlayableRelated();
+        if (next != null) {
+            launchRecommended(next);
+            return;
+        }
+        if (relatedLoading) {
+            pendingAutoplayRecommended = true;
+            stateText = "正在寻找下一个视频…";
+            controlsVisible = false;
+            menuMode = false;
+            subMenuMode = false;
+            infoMode = false;
+            middleMode = false;
+            overlay.invalidate();
+            return;
+        }
+        stateText = "";
+        controlsVisible = true; menuMode = false; subMenuMode = false;
+        showFeedback("没有自动续播的推荐视频");
+        overlay.invalidate();
+    }
+
+    private VideoItem firstPlayableRelated() {
+        String currentBvid = stream == null ? "" : stream.bvid;
+        for (VideoItem item : relatedVideos) {
+            String url = item.targetUrl == null ? "" : item.targetUrl;
+            if (url.isEmpty()) continue;
+            String bvid = extractBvid(url);
+            if (bvid.isEmpty() && !url.contains("/video/")) continue;
+            if (!currentBvid.isEmpty() && currentBvid.equals(bvid)) continue;
+            return item;
+        }
+        return null;
+    }
+
+    /** 打开推荐视频作为新播放页，强制自动播放并结束当前页，避免返回栈堆积。 */
+    private void launchRecommended(VideoItem item) {
+        if (destroyed || autoplayLaunching || item == null) return;
+        autoplayLaunching = true;
+        pendingAutoplayRecommended = false;
+        Intent intent = new Intent(this, PlayerActivity.class);
+        intent.putExtra(EXTRA_URL, item.targetUrl);
+        intent.putExtra(EXTRA_DANMAKU, danmakuEnabled);
+        intent.putExtra(EXTRA_AUTOPLAY, true);
+        intent.putExtra(EXTRA_HIGH_QUALITY, highQuality);
+        startActivity(intent);
+        finish();
+    }
+
     private void prepareSource(PlaybackRepository.Stream target, int startPositionMs) {
         if (destroyed || player == null || target == null) return;
+        prefetchRelated();
         MediaSource source = buildMediaSource(target);
         if (source == null) {
             handlePlaybackFailure("播放源不可用");
@@ -1251,6 +1363,7 @@ public final class PlayerActivity extends Activity {
     }
 
     private void seekBy(int delta) {
+        cancelPendingAutoplay();
         if (isLive()) {
             showFeedback("直播暂不支持快进或快退");
             showControls(false);
@@ -1381,6 +1494,7 @@ public final class PlayerActivity extends Activity {
     }
 
     private void togglePlayback() {
+        cancelPendingAutoplay();
         if (!prepared && player != null) {
             if (pendingEpisode != null) {
                 PlaybackRepository.Episode retry = pendingEpisode;
@@ -1400,6 +1514,7 @@ public final class PlayerActivity extends Activity {
         if (!prepared || player == null) { showControls(false); return; }
         try {
             if (player.getPlaybackState() == Player.STATE_ENDED) {
+                endedHandled = false;
                 if (isLive()) {
                     prepareSource(stream, 0);
                 } else {
@@ -1599,6 +1714,7 @@ public final class PlayerActivity extends Activity {
         stopResumeSaving();
         saveLocalResume();
         if (prepared) reportProgressNow();
+        pendingAutoplayRecommended = false;
         destroyed = true;
         releasePlayer();
         detailRepository.shutdown();

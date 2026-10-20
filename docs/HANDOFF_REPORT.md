@@ -1,9 +1,9 @@
 # 哔哩客厅 Android 项目交接报告
 
-> 交接日期：2026-10-19
-> 当前版本：**1.15.0**（`versionCode 26`）
-> 交接报告生成时的 HEAD：`5f7599b`（最新 HEAD 以 `git log -1` 为准）
-> v1.14.4 代码提交：`8683e48`（tag `v1.14.4`）
+> 交接日期：2026-10-20
+> 当前版本：**1.16.1**（`versionCode 28`）
+> v1.16.1 代码提交：`166bc94`（tag `v1.16.1`）；最新 HEAD 以 `git log -1` 为准
+> 最近稳定 tag：`v1.14.4`；GitHub Release：`v1.16.1`（`HarmonyRun/bilibili-wangye-fengzhuang-tv`）
 > 应用 ID：`com.ponyrun.bililivingroom`
 > 项目路径：`/Users/ponyrun/Documents/AndroidApp/ilibilib`
 
@@ -21,26 +21,26 @@
 
 | 交付物 | 位置 | 状态 |
 | --- | --- | --- |
-| 可安装 Debug APK | `../BiliLivingRoom-debug.apk` | `1.15.0 (26)` |
+| 可安装 Debug APK | `../BiliLivingRoom-debug.apk` | `1.16.1 (28)` |
 | Gradle 输出 APK | `../app/build/outputs/apk/debug/app-debug.apk` | `assembleDebug` 生成 |
-| 源代码 | `../app/src/main/java/com/ponyrun/bililivingroom/` | Java 8，约 8,430 行 |
-| 需求/版本记录 | `CHANGELOG.md` | v1.4.0 → v1.15.0 |
+| 源代码 | `../app/src/main/java/com/ponyrun/bililivingroom/` | Java 8，约 9,970 行 |
+| 需求/版本记录 | `CHANGELOG.md` | v1.4.0 → v1.16.1 |
 | 历史基线评审 | `PROJECT_STATUS_AND_ROADMAP.md` | v1.4.0 基线评审 + 后续路线（顶部已标注为历史快照；当前状态以本报告为准） |
 | 设计与实现 QA | `../design-qa.md` | 视觉、交互、验收记录 |
-| 截图证据 | `../qa/` | 按版本归档，v1.5 → v1.15.0 |
+| 截图证据 | `../qa/` | 按版本归档，v1.5 → v1.16.1 |
 | 开源说明 | `../NOTICE.md`、`../LICENSE.md` | GPL v2 与上游归属 |
 
 当前 APK SHA-256（每次重新构建后以 `shasum -a 256 BiliLivingRoom-debug.apk` 为准）：
 
 ```text
-8abd512f9466fc98975527e72dbbfb4d168857a6b0fdf778d7a47c2bb52c6e76
+2ad6f18554a18aa4138c0885f262873128bbc3ae8314a672d251ca6021ab32c4
 ```
 
 当前构建状态：
 
 - `./gradlew clean assembleDebug lintDebug` → **BUILD SUCCESSFUL**
-- Lint：**0 errors / 28 warnings**（固定横屏、DiscouragedApi、WebView JavaScript、依赖版本提示等）
-- v1.15.0 为当前视觉升级工作区；是否提交和打 tag 由接手者确认
+- Lint：**0 errors / 36 warnings**（固定横屏、DiscouragedApi、WebView JavaScript、依赖版本提示等）
+- v1.16.1 已实现连续播放与 GitHub OTA；代码已提交并打 tag，Release v1.16.1 已发布
 - 测试模拟器内保留了真实账号登录态；**开发收尾时再统一退出/清除 Cookie**，不要把二维码、Cookie 或账号信息提交到仓库
 
 ---
@@ -155,6 +155,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 - 播放中每 15 秒回写 B 站观看进度（`/x/v2/history/report`，失败回退 heartbeat）；
 - 本地播放进度续播（`PlaybackResume`，按 `ep:/cid:/url:` 保存，5 秒/暂停/退出保存，片尾清除）；
 - 番剧左下标题显示「季名 · 第N集 剧集标题」，多 P 显示「标题 · P<number>」。
+- 连续播放：播放结束优先按顺序下一集/下一 P；没有下一项时自动打开相关推荐第一条；直播不自动续播。
 - 进度层显示播放/暂停图标、缓存进度、品牌粉已播进度、白色拖动圆点与时间；直播显示 `LIVE`。
 - 快进/快退、暂停/继续、弹幕开关、倍速切换均有短时状态反馈；直播按左右键会提示不支持快进或快退。
 - 播放中重缓冲会显式提示；解析或线路失败显示可读错误面板，按 OK 可重新解析并加载。
@@ -196,6 +197,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
   - 稍后再看；
   - 我的追番；
   - 设置（按「播放体验 / 画质偏好」分组的默认弹幕/自动播放/优先高清）；
+  - 检测更新（GitHub Release OTA，见 4.9）；
   - 退出登录（动作，不跳页）；
 - 四类内容卡具有独立状态表达：历史观看进度条、收藏「收藏」、稍后再看「待看」、追番「追番」；列表默认等大，仅当前遥控器焦点放大；
 - 空内容或加载失败时显示居中说明面板，按 OK 可重新加载；
@@ -220,6 +222,13 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 - 直播卡片直接进入 `PlayerActivity`，使用 HLS；未开播主播的搜索结果 target 已改为 space URL，进原生 UP 页。
 - 番剧卡片直接进入 `PlayerActivity`，支持 season/episode 解析、选集切换、剧集标题、进度回写与本地续播。
 - 番剧/直播**暂无独立详情页**（视频详情页当前面向普通视频）。
+
+### 4.9 OTA 更新
+
+- 设置第 4 行「检测更新」→ `UpdateActivity`。
+- `UpdateManager` 请求 `https://api.github.com/repos/HarmonyRun/bilibili-wangye-fengzhuang-tv/releases/latest`，比较 tag 版本与 `BuildConfig.VERSION_NAME`。
+- 有新版本时显示版本号/更新说明/APK 大小；下载到 `cache/updates`，通过 `FileProvider` + `ACTION_VIEW` 拉起系统安装器；API 26+ 需允许“安装未知应用”。
+- 当前 Release：`v1.16.1`，APK 使用本机 Debug 签名；正式发布需固定 release keystore，否则已安装应用无法覆盖升级。
 
 ---
 
@@ -251,11 +260,11 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 
 | 文件（`app/src/main/java/com/ponyrun/bililivingroom/`） | 行数 | 职责 |
 | --- | ---: | --- |
-| `MainActivity.java` | 1852 | 8 页主界面、自绘导航/网格/搜索/我的、焦点状态机、刷新与分页 |
-| `PlayerActivity.java` | 2002 | ExoPlayer 播放、控制层、三功能区、弹幕、选集/分P、续播、进度回写 |
-| `BiliRepository.java` | 1535 | 首页/排行/直播/搜索/账号/动态/UP/详情/收藏夹/WBI 相关 API、图片缓存 |
+| `MainActivity.java` | 2251 | 8 页主界面、自绘导航/网格/搜索/我的、焦点状态机、刷新与分页 |
+| `PlayerActivity.java` | 2295 | ExoPlayer 播放、控制层、三功能区、弹幕、选集/分P、续播、进度回写 |
+| `BiliRepository.java` | 1670 | 首页/排行/直播/搜索/账号/动态/UP/详情/收藏夹/WBI 相关 API、图片缓存 |
 | `PlaybackRepository.java` | 1001 | BV/AV/番剧/直播流解析、清晰度、弹幕、剧集/分P、进度上报 |
-| `VideoDetailActivity.java` | 600 | 原生视频详情页、选集/推荐、UP 跳转、写操作 |
+| `VideoDetailActivity.java` | 645 | 原生视频详情页、选集/推荐、UP 跳转、写操作 |
 | `UserSpaceActivity.java` | 423 | 原生 UP 主页、投稿分页、可选直播状态 |
 | `BiliAuthRepository.java` | 194 | TV 二维码登录、签名、Cookie、用户 UID |
 | `DynamicDetailActivity.java` | 213 | 原生动态详情 |
@@ -265,7 +274,9 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 | `BrowserActivity.java` | 176 | 带原生 TV 工具栏、网页放大和焦点增强的 WebView 兜底页 |
 | `PlaybackResume.java` | 49 | 本地播放进度 |
 | `PlaybackSettings.java` | 43 | 弹幕/自动播放/高清设置 |
-| `VideoItem.java` | 19 | 卡片统一模型 |
+| `VideoItem.java` | 36 | 卡片统一模型 |
+| `UpdateManager.java` | 332 | GitHub Release 检查、APK 下载、FileProvider 安装 |
+| `UpdateActivity.java` | 291 | 软件更新页面 |
 
 ### 关键实现特征
 
@@ -297,6 +308,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 | 弹幕 | `comment.bilibili.com/<cid>.xml` |
 | 进度 | `x/v2/history/report`（主）、心跳接口（兜底） |
 | 详情页动作 | `x/web-interface/archive/like`、`x/web-interface/coin/add`、`x/v2/history/toview/add`、`x/v3/fav/folder/created/list-all`、`x/v3/fav/resource/deal` |
+| OTA | `api.github.com/repos/HarmonyRun/bilibili-wangye-fengzhuang-tv/releases/latest`、Release APK asset |
 
 错误处理原则：
 
@@ -329,6 +341,8 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 | v1.14.2 | 弹幕字号/60fps/平滑优化 |
 | v1.14.3 | 详情焦点回退、弹幕匀速与边缘入场 |
 | v1.14.4 | 二级导航番剧、焦点即切换、详情按钮粉色选中 |
+| v1.15.0 | Pearl Glass Gallery 全局视觉升级 |
+| v1.16.1 | 连续播放 + GitHub OTA 更新 |
 
 完整逐版本说明见 `CHANGELOG.md`；版本迭代细节、剩余路线见 `PROJECT_STATUS_AND_ROADMAP.md`。
 
@@ -338,7 +352,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 
 ### 9.1 已执行的工程验证
 
-- `clean assembleDebug lintDebug`：**成功，0 errors / 23 warnings**；
+- `clean assembleDebug lintDebug`：**成功，0 errors / 36 warnings**；
 - APK 可安装到 `bili_tv` AVD；
 - 模拟器真实账号登录态下完成主要流程验收（见下）。
 
@@ -354,7 +368,9 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 - 搜索：热搜/历史/清空历史、输入弹层、分类/分页；
 - “我的”：左资料/菜单 + 右侧历史/收藏/稍后再看/追番/设置原地切换；
 - UP 主页（WBI 投稿列表/分页/播放）、动态文字详情、动态/视频路由；
-- 番剧标题显示第 N 集；00:52 退出后重进续播。
+- 番剧标题显示第 N 集；00:52 退出后重进续播；
+- 普通视频结束自动进入推荐视频；多P/番剧按顺序下一P/下一集；
+- GitHub Release v1.16.1 检测、下载、FileProvider 安装器拉起，1.16.0 → 1.16.1 更新成功。
 
 ### 9.3 未做运行时验收/需下一阶段补测
 
@@ -366,8 +382,8 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 
 ### 9.4 证据位置
 
-- 最新版本：`../qa/v1.15.0/`
-- 历史版本：`../qa/v1.5/` … `../qa/v1.14.3/`
+- 最新版本：`../qa/v1.16.1/`
+- 历史版本：`../qa/v1.5/` … `../qa/v1.15.0/`
 - 早期截图：`../qa/implementation-*.png`
 - 视觉/交互验收：`../design-qa.md`
 
@@ -389,6 +405,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 - 详情页写操作（点赞/投币/稍后再看/收藏）未实测，且没有 toggle 状态；收藏只调用默认收藏夹。
 - WBI/空间接口、排行榜、搜索等依赖 B 站 Web API，存在风控、字段变更、接口失效风险。
 - 登录过期/多设备挤下线时，目前主要靠页面重进/刷新恢复，缺少统一登录失效拦截。
+- OTA 更新包必须与已安装应用使用同一签名；当前 Release 使用本机 Debug 签名，换机器或 CI 构建会因签名不一致无法覆盖安装，需要固定 release keystore。
 
 ### P2：体验与数据
 
@@ -449,7 +466,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 - [ ] 走通：播放器 ↑/↓ 三区、清晰度/倍速/选集、进度续播。
 - [ ] 走通：搜索热搜/历史/输入、我的页各功能区、UP 主页、动态详情。
 - [ ] 检查 logcat `FATAL EXCEPTION`、`ExoPlaybackException`、`BiliProgress`。
-- [ ] 验收 v1.15.0 后确认 Git 工作区并按需提交/tag。
+- [ ] 验收 v1.16.1 后确认 Git 工作区并按需提交/tag。
 - [ ] 若要继续开发，先建分支；不要提交二维码截图、Cookie、`local.properties`、`app/build/`。
 
 ---
@@ -483,6 +500,17 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 
 4. **版本纪律**：每次交付更新 `CHANGELOG.md` / 本报告 / QA 截图，构建通过后 commit + tag。
 5. **当前状态**：v1.15.0 已完成 Pearl Glass Gallery 视觉升级并可继续开发；发布级质量仍需完成第 11 节清单。
+
+---
+
+## 16. v1.16.1 连续播放与 OTA（2026-10-20）
+
+- 连续播放：`PlayerActivity` 预取相关推荐；结束时优先 `playNextIfAvailable()`（番剧下一集/多P下一P），否则自动打开推荐第一条新播放页（强制 autoplay、finish 当前页）；推荐加载中会 pending 等待；直播不续播。
+- OTA：`UpdateManager` 请求 GitHub Releases latest、版本比较（semver）、APK 下载到 `cache/updates`、FileProvider 安装；`UpdateActivity` 自动检查/重新检查、下载进度、未知来源授权引导；设置第 4 行入口。
+- Release：`v1.16.1` 已上传 APK 到 `HarmonyRun/bilibili-wangye-fengzhuang-tv`；实测 1.16.0 检测并更新到 1.16.1。
+- 版本/构建：`1.16.1 (28)`，Lint 0 errors / 36 warnings，APK SHA-256 `2ad6f18554a18aa4138c0885f262873128bbc3ae8314a672d251ca6021ab32c4`。
+- 证据：`qa/v1.16.1/`。
+- 注意：OTA 必须保持签名一致；公开仓库默认不包含 QA/design 截图与 APK。
 
 ---
 

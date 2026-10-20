@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.16.1（2026-10-20）
+
+**连续播放 + GitHub OTA 更新。**
+
+- 连续播放：播放结束优先按顺序切下一集/下一 P；没有下一项时预取并自动打开推荐视频（新播放页强制自动播放，当前页 finish，避免返回栈堆积）；相关推荐加载中会等待回调后继续；直播不自动续播。
+- OTA：新增 `UpdateManager`，请求 GitHub `releases/latest`、比较版本、下载 APK 到 cache；`UpdateActivity` 显示当前/最新版本、更新说明、大小、下载进度，并通过 FileProvider 拉起系统安装器；设置页新增第 4 行「检测更新」。
+- 工程配置：新增 `REQUEST_INSTALL_PACKAGES`、FileProvider、`file_paths.xml`、`androidx.core:core:1.13.1`；版本升级为 `1.16.1 (28)`。
+- 实测：普通视频结束自动进入推荐视频；1.16.0 检测到 GitHub Release v1.16.1，下载后系统安装器确认并更新成功。
+- 证据：`qa/v1.16.1/`。
+- 注意：OTA 安装包必须与已安装应用使用同一签名；当前 Release 使用本机 Debug 签名，正式发布需固定 release keystore。
+
 ## v1.15.0（2026-10-20）
 
 **Pearl Glass Gallery 全局视觉升级。**

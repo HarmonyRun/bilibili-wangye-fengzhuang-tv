@@ -10,8 +10,8 @@ android {
         applicationId 'com.ponyrun.bililivingroom'
         minSdk 23
         targetSdk 35
-        versionCode 26
-        versionName '1.15.0'
+        versionCode 28
+        versionName '1.16.1'
     }
 
     compileOptions {
@@ -33,6 +33,7 @@ android {
 
 dependencies {
     implementation 'com.google.zxing:core:3.5.3'
+    implementation 'androidx.core:core:1.13.1'
     implementation 'androidx.media3:media3-exoplayer:1.4.1'
     implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
     implementation 'androidx.media3:media3-datasource:1.4.1'

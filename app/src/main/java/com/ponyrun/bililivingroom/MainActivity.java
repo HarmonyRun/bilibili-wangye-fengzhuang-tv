@@ -1202,9 +1202,20 @@ public final class MainActivity extends Activity {
                 label(c, notes[i], left + dp(26), y + dp(59), dp(14), focused ? 0xffd7e1e5 : COLOR_MUTED, Paint.Align.LEFT, false);
                 drawToggle(c, right - dp(92), y + dp(21), values[i], focused);
             }
-            float bottom = top + labels.length * (rowH + gap) + dp(42);
-            label(c, "应用版本  " + BuildConfig.VERSION_NAME, left, bottom + dp(28), dp(15), 0xff60747a, Paint.Align.LEFT, false);
-            label(c, "OK 切换 · ← 返回导航 · ↑ 顶部刷新", left, bottom + dp(56), dp(15), 0xff8a656f, Paint.Align.LEFT, false);
+            float updateY = top + 3 * (rowH + gap) + dp(42);
+            boolean updateFocused = area == AREA_GRID && gridIndex == 3;
+            rounded(c, left, updateY, right, updateY + rowH, dp(18), updateFocused ? COLOR_FOCUS : COLOR_CARD);
+            stroke(c, left, updateY, right, updateY + rowH, dp(18), 0x1813212b, dp(1));
+            if (updateFocused) stroke(c, left - dp(3), updateY - dp(3), right + dp(3), updateY + rowH + dp(3), dp(21), COLOR_PINK, dp(3));
+            label(c, "检测更新", left + dp(26), updateY + dp(32), dp(21),
+                    updateFocused ? Color.WHITE : Color.rgb(31, 45, 50), Paint.Align.LEFT, true);
+            label(c, "检查 GitHub 上的新版本", left + dp(26), updateY + dp(59), dp(14),
+                    updateFocused ? 0xffd7e1e5 : COLOR_MUTED, Paint.Align.LEFT, false);
+            label(c, BuildConfig.VERSION_NAME + "   ›", right - dp(26), updateY + dp(35), dp(16),
+                    updateFocused ? Color.WHITE : COLOR_MUTED, Paint.Align.RIGHT, false);
+            float bottom = updateY + rowH + dp(22);
+            label(c, "应用版本  " + BuildConfig.VERSION_NAME, left, bottom + dp(24), dp(15), 0xff60747a, Paint.Align.LEFT, false);
+            label(c, "OK 打开检测更新 · ← 返回导航 · ↑ 顶部刷新", left, bottom + dp(52), dp(15), 0xff8a656f, Paint.Align.LEFT, false);
         }
 
         private void drawPersonalContentCard(Canvas c, VideoItem item, float x, float y,
@@ -1882,7 +1893,11 @@ public final class MainActivity extends Activity {
             if ((navIndex == 4 || navIndex == 5) && videos.isEmpty() && !BiliAuthRepository.hasSession()) startActivity(new Intent(MainActivity.this, LoginActivity.class));
             else if (navIndex == 6 && personalMode < 0) {
                 if (isPersonalRoot()) {
-                    if (rootSection == 4) { toggleSetting(gridIndex); return; }
+                    if (rootSection == 4) {
+                        if (gridIndex == 3) startActivity(new Intent(MainActivity.this, UpdateActivity.class));
+                        else toggleSetting(gridIndex);
+                        return;
+                    }
                     if (canRetryEmptyState()) { lastLoadAction.run(); return; }
                     if (!videos.isEmpty() && gridIndex < videos.size()) open(videos.get(gridIndex).targetUrl);
                 } else {
@@ -1989,7 +2004,7 @@ public final class MainActivity extends Activity {
         }
 
         private int maxGridIndex() {
-            if (navIndex == 6 && personalMode < 0) return isPersonalRoot() ? (rootSection == 4 ? 2 : videos.size() - 1) : 5;
+            if (navIndex == 6 && personalMode < 0) return isPersonalRoot() ? (rootSection == 4 ? 3 : videos.size() - 1) : 5;
             if (navIndex == 6 && personalMode == 0) return BiliAuthRepository.hasSession() ? 3 : 2;
             if (navIndex == 6 && personalMode == 5) return 2;
             return videos.size() - 1;
