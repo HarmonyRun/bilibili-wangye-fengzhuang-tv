@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.16.2（2026-10-20）
+
+**修复竖屏视频被拉伸为横屏。**
+
+- `PlayerActivity` 监听 ExoPlayer `onVideoSizeChanged`，结合视频宽高、旋转元数据与像素宽高比计算真实显示比例。
+- SurfaceView 按比例居中：竖屏视频左右留黑边，横屏视频仍铺满全屏；overlay/弹幕/控制层保持全屏。
+- 验证：BV13EnG63E4Z（1080×1920）竖屏比例正确；BV186Jq6uEFu 横屏全屏无回归。证据 `qa/v1.16.2/`。
+- 版本升级为 `1.16.2 (29)`；Lint 0 errors / 36 warnings；APK SHA-256 `800cf5f7e86c331dc75d0d40b723e2ad66f2bd2c7cc44bd78cf6eb3f3246d955`。
+
 ## v1.16.1（2026-10-20）
 
 **连续播放 + GitHub OTA 更新。**

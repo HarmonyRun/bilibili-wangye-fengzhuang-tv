@@ -13,6 +13,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.util.LruCache;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.SurfaceView;
 import android.view.View;
@@ -23,6 +24,7 @@ import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.VideoSize;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.hls.HlsMediaSource;
@@ -68,6 +70,8 @@ public final class PlayerActivity extends Activity {
     private boolean resumeSaving;
     private final List<PlaybackRepository.Danmaku> danmaku = new ArrayList<>();
     private SurfaceView surface;
+    private FrameLayout rootView;
+    private float videoAspect = 1f;
     private PlayerOverlay overlay;
     private ExoPlayer player;
     private DefaultHttpDataSource.Factory dataSourceFactory;
@@ -237,6 +241,21 @@ public final class PlayerActivity extends Activity {
             }
         }
 
+        @Override public void onVideoSizeChanged(VideoSize videoSize) {
+            if (destroyed || videoSize == null || videoSize.width <= 0 || videoSize.height <= 0) return;
+            int width = videoSize.width;
+            int height = videoSize.height;
+            // 部分竖屏视频通过旋转元数据标记，按显示方向交换宽高。
+            if (videoSize.unappliedRotationDegrees % 180 != 0) {
+                int temp = width;
+                width = height;
+                height = temp;
+            }
+            float ratio = videoSize.pixelWidthHeightRatio > 0f ? videoSize.pixelWidthHeightRatio : 1f;
+            videoAspect = (width * ratio) / Math.max(1f, height);
+            if (rootView != null) rootView.post(PlayerActivity.this::applyVideoAspect);
+        }
+
         @Override public void onPlayerError(PlaybackException error) {
             if (destroyed) return;
             stopProgressReporting();
@@ -257,13 +276,15 @@ public final class PlayerActivity extends Activity {
         super.onCreate(state);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().getDecorView().setSystemUiVisibility(5894);
-        FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
+        rootView = new FrameLayout(this);
+        rootView.setBackgroundColor(Color.BLACK);
         surface = new SurfaceView(this);
-        root.addView(surface, new FrameLayout.LayoutParams(-1, -1));
+        rootView.addView(surface, new FrameLayout.LayoutParams(-1, -1));
         overlay = new PlayerOverlay();
-        root.addView(overlay, new FrameLayout.LayoutParams(-1, -1));
-        setContentView(root);
+        rootView.addView(overlay, new FrameLayout.LayoutParams(-1, -1));
+        rootView.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom)
+                -> applyVideoAspect());
+        setContentView(rootView);
         pageUrl = getIntent().getStringExtra(EXTRA_URL);
         if (pageUrl == null) pageUrl = "";
         playbackUrl = pageUrl;
@@ -1697,6 +1718,34 @@ public final class PlayerActivity extends Activity {
         danmakuAnchorRealtimeMs = SystemClock.elapsedRealtime();
         danmakuAnchorValid = true;
         danmakuLastSmoothMs = danmakuAnchorPositionMs;
+    }
+
+    /**
+     * 按视频真实宽高比居中 SurfaceView：竖屏视频左右留黑边，横屏视频保持全屏，
+     * 避免 SurfaceView 固定铺满屏幕导致画面被拉伸。
+     */
+    private void applyVideoAspect() {
+        if (destroyed || rootView == null || surface == null) return;
+        int rootWidth = rootView.getWidth();
+        int rootHeight = rootView.getHeight();
+        if (rootWidth <= 0 || rootHeight <= 0 || videoAspect <= 0f) return;
+        int videoWidth;
+        int videoHeight;
+        if (rootWidth / (float) rootHeight > videoAspect) {
+            videoHeight = rootHeight;
+            videoWidth = Math.round(rootHeight * videoAspect);
+        } else {
+            videoWidth = rootWidth;
+            videoHeight = Math.round(rootWidth / videoAspect);
+        }
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) surface.getLayoutParams();
+        if (params == null) params = new FrameLayout.LayoutParams(videoWidth, videoHeight);
+        if (params.width == videoWidth && params.height == videoHeight && params.gravity == Gravity.CENTER) return;
+        params.width = videoWidth;
+        params.height = videoHeight;
+        params.gravity = Gravity.CENTER;
+        surface.setLayoutParams(params);
+        surface.requestLayout();
     }
 
     private void releasePlayer() {

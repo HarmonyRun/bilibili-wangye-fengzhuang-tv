@@ -1,8 +1,8 @@
 # 哔哩客厅 Android 项目交接报告
 
 > 交接日期：2026-10-20
-> 当前版本：**1.16.1**（`versionCode 28`）
-> v1.16.1 代码提交：`166bc94`（tag `v1.16.1`）；最新 HEAD 以 `git log -1` 为准
+> 当前版本：**1.16.2**（`versionCode 29`）
+> v1.16.1 代码提交：`166bc94`（tag `v1.16.1`）；v1.16.2 为当前工作区，提交后以 `git log -1` 为准
 > 最近稳定 tag：`v1.14.4`；GitHub Release：`v1.16.1`（`HarmonyRun/bilibili-wangye-fengzhuang-tv`）
 > 应用 ID：`com.ponyrun.bililivingroom`
 > 项目路径：`/Users/ponyrun/Documents/AndroidApp/ilibilib`
@@ -21,19 +21,19 @@
 
 | 交付物 | 位置 | 状态 |
 | --- | --- | --- |
-| 可安装 Debug APK | `../BiliLivingRoom-debug.apk` | `1.16.1 (28)` |
+| 可安装 Debug APK | `../BiliLivingRoom-debug.apk` | `1.16.2 (29)` |
 | Gradle 输出 APK | `../app/build/outputs/apk/debug/app-debug.apk` | `assembleDebug` 生成 |
 | 源代码 | `../app/src/main/java/com/ponyrun/bililivingroom/` | Java 8，约 9,970 行 |
-| 需求/版本记录 | `CHANGELOG.md` | v1.4.0 → v1.16.1 |
+| 需求/版本记录 | `CHANGELOG.md` | v1.4.0 → v1.16.2 |
 | 历史基线评审 | `PROJECT_STATUS_AND_ROADMAP.md` | v1.4.0 基线评审 + 后续路线（顶部已标注为历史快照；当前状态以本报告为准） |
 | 设计与实现 QA | `../design-qa.md` | 视觉、交互、验收记录 |
-| 截图证据 | `../qa/` | 按版本归档，v1.5 → v1.16.1 |
+| 截图证据 | `../qa/` | 按版本归档，v1.5 → v1.16.2 |
 | 开源说明 | `../NOTICE.md`、`../LICENSE.md` | GPL v2 与上游归属 |
 
 当前 APK SHA-256（每次重新构建后以 `shasum -a 256 BiliLivingRoom-debug.apk` 为准）：
 
 ```text
-2ad6f18554a18aa4138c0885f262873128bbc3ae8314a672d251ca6021ab32c4
+800cf5f7e86c331dc75d0d40b723e2ad66f2bd2c7cc44bd78cf6eb3f3246d955
 ```
 
 当前构建状态：
@@ -156,6 +156,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 - 本地播放进度续播（`PlaybackResume`，按 `ep:/cid:/url:` 保存，5 秒/暂停/退出保存，片尾清除）；
 - 番剧左下标题显示「季名 · 第N集 剧集标题」，多 P 显示「标题 · P<number>」。
 - 连续播放：播放结束优先按顺序下一集/下一 P；没有下一项时自动打开相关推荐第一条；直播不自动续播。
+- 竖屏视频按原始比例居中显示（左右黑边），横屏视频全屏，不再被拉伸。
 - 进度层显示播放/暂停图标、缓存进度、品牌粉已播进度、白色拖动圆点与时间；直播显示 `LIVE`。
 - 快进/快退、暂停/继续、弹幕开关、倍速切换均有短时状态反馈；直播按左右键会提示不支持快进或快退。
 - 播放中重缓冲会显式提示；解析或线路失败显示可读错误面板，按 OK 可重新解析并加载。
@@ -261,7 +262,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 | 文件（`app/src/main/java/com/ponyrun/bililivingroom/`） | 行数 | 职责 |
 | --- | ---: | --- |
 | `MainActivity.java` | 2251 | 8 页主界面、自绘导航/网格/搜索/我的、焦点状态机、刷新与分页 |
-| `PlayerActivity.java` | 2295 | ExoPlayer 播放、控制层、三功能区、弹幕、选集/分P、续播、进度回写 |
+| `PlayerActivity.java` | 2344 | ExoPlayer 播放、控制层、三功能区、弹幕、选集/分P、续播、进度回写 |
 | `BiliRepository.java` | 1670 | 首页/排行/直播/搜索/账号/动态/UP/详情/收藏夹/WBI 相关 API、图片缓存 |
 | `PlaybackRepository.java` | 1001 | BV/AV/番剧/直播流解析、清晰度、弹幕、剧集/分P、进度上报 |
 | `VideoDetailActivity.java` | 645 | 原生视频详情页、选集/推荐、UP 跳转、写操作 |
@@ -343,6 +344,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 | v1.14.4 | 二级导航番剧、焦点即切换、详情按钮粉色选中 |
 | v1.15.0 | Pearl Glass Gallery 全局视觉升级 |
 | v1.16.1 | 连续播放 + GitHub OTA 更新 |
+| v1.16.2 | 竖屏视频比例修复 |
 
 完整逐版本说明见 `CHANGELOG.md`；版本迭代细节、剩余路线见 `PROJECT_STATUS_AND_ROADMAP.md`。
 
@@ -370,7 +372,8 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 - UP 主页（WBI 投稿列表/分页/播放）、动态文字详情、动态/视频路由；
 - 番剧标题显示第 N 集；00:52 退出后重进续播；
 - 普通视频结束自动进入推荐视频；多P/番剧按顺序下一P/下一集；
-- GitHub Release v1.16.1 检测、下载、FileProvider 安装器拉起，1.16.0 → 1.16.1 更新成功。
+- GitHub Release v1.16.1 检测、下载、FileProvider 安装器拉起，1.16.0 → 1.16.1 更新成功；
+- 竖屏 BV13EnG63E4Z 比例正确、横屏 BV186Jq6uEFu 全屏无回归。
 
 ### 9.3 未做运行时验收/需下一阶段补测
 
@@ -382,8 +385,8 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 
 ### 9.4 证据位置
 
-- 最新版本：`../qa/v1.16.1/`
-- 历史版本：`../qa/v1.5/` … `../qa/v1.15.0/`
+- 最新版本：`../qa/v1.16.2/`
+- 历史版本：`../qa/v1.5/` … `../qa/v1.16.1/`
 - 早期截图：`../qa/implementation-*.png`
 - 视觉/交互验收：`../design-qa.md`
 
@@ -511,6 +514,15 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 - 版本/构建：`1.16.1 (28)`，Lint 0 errors / 36 warnings，APK SHA-256 `2ad6f18554a18aa4138c0885f262873128bbc3ae8314a672d251ca6021ab32c4`。
 - 证据：`qa/v1.16.1/`。
 - 注意：OTA 必须保持签名一致；公开仓库默认不包含 QA/design 截图与 APK。
+
+---
+
+## 17. v1.16.2 竖屏视频比例修复（2026-10-20）
+
+- 现象：竖屏视频在横屏 Activity 中被 SurfaceView 铺满，导致拉伸。
+- 修复：`Player.onVideoSizeChanged` 计算 `width/height/旋转/像素宽高比`，SurfaceView 按比例居中；竖屏左右黑边，横屏全屏；overlay/弹幕/控制层保持全屏。
+- 验证：竖屏 BV13EnG63E4Z（1080×1920）比例正确；横屏 BV186Jq6uEFu 全屏无回归。证据 `qa/v1.16.2/`。
+- 版本：`1.16.2 (29)`，APK SHA-256 `800cf5f7e86c331dc75d0d40b723e2ad66f2bd2c7cc44bd78cf6eb3f3246d955`。
 
 ---
 
