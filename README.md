@@ -1,8 +1,10 @@
-# 哔哩客厅
+# 哔哩客厅（bilibili网页封装TV版）
 
 一个面向遥控器操作的 B 站 Android 大屏客户端。产品结构与交互模型转译自 GPL-2.0 项目 [ATV-Bilibili-demo](https://github.com/yichengchen/ATV-Bilibili-demo)，并针对 Android 重写；Android 系统层面仍声明为普通手机应用。
 
 当前版本：`1.15.0`（`versionCode 26`，Debug 构建）。
+
+> 公开仓库说明：`qa/` 验收截图与 `design/` 设计素材未上传，前者包含真实账号信息；详见 `PUBLIC_REPO_NOTE.md`。
 
 ## 已实现
 
