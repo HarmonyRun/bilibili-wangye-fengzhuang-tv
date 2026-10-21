@@ -65,6 +65,8 @@ public final class VideoDetailActivity extends Activity {
     private LinearLayout relatedRow;
     private TextView sectionTitleView;
     private LinearLayout upRow;
+    private LinearLayout topSection;
+    private LinearLayout buttonsRow;
     private boolean showingParts;
 
     @Override public void onCreate(Bundle state) {
@@ -119,13 +121,13 @@ public final class VideoDetailActivity extends Activity {
         content.setPadding((int) dp(72), (int) dp(72), (int) dp(72), (int) dp(60));
         scroll.addView(content, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        LinearLayout top = new LinearLayout(this);
-        top.setOrientation(LinearLayout.HORIZONTAL);
-        content.addView(top, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        topSection = new LinearLayout(this);
+        topSection.setOrientation(LinearLayout.HORIZONTAL);
+        content.addView(topSection, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout left = new LinearLayout(this);
         left.setOrientation(LinearLayout.VERTICAL);
-        top.addView(left, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        topSection.addView(left, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         titleView = text("", 52, Color.WHITE, true);
         titleView.setMaxLines(2);
@@ -198,7 +200,7 @@ public final class VideoDetailActivity extends Activity {
         coverBox.setClipToOutline(true);
         LinearLayout.LayoutParams coverParams = new LinearLayout.LayoutParams((int) dp(780), (int) dp(438));
         coverParams.leftMargin = (int) dp(42);
-        top.addView(coverBox, coverParams);
+        topSection.addView(coverBox, coverParams);
         cover = new ImageView(this);
         cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
         coverBox.addView(cover, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -210,26 +212,26 @@ public final class VideoDetailActivity extends Activity {
         badgeParams.setMargins(0, 0, (int) dp(10), (int) dp(10));
         coverBox.addView(durationBadge, badgeParams);
 
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.setPadding(0, (int) dp(24), 0, (int) dp(14));
-        content.addView(buttons, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        buttonsRow = new LinearLayout(this);
+        buttonsRow.setOrientation(LinearLayout.HORIZONTAL);
+        buttonsRow.setPadding(0, (int) dp(24), 0, (int) dp(14));
+        content.addView(buttonsRow, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         playButton = actionButton("播放", true);
         watchLaterButton = actionButton("稍后再看", false);
         likeButton = actionButton("点赞", false);
         coinButton = actionButton("投币", false);
         favoriteButton = actionButton("收藏", false);
-        setButtonIcon(playButton, android.R.drawable.ic_media_play);
-        setButtonIcon(watchLaterButton, android.R.drawable.ic_menu_recent_history);
-        setButtonIcon(likeButton, android.R.drawable.ic_menu_send);
-        setButtonIcon(coinButton, android.R.drawable.ic_menu_info_details);
-        setButtonIcon(favoriteButton, android.R.drawable.btn_star_big_off);
-        addButton(buttons, playButton);
-        addButton(buttons, watchLaterButton);
-        addButton(buttons, likeButton);
-        addButton(buttons, coinButton);
-        addButton(buttons, favoriteButton);
+        setButtonIcon(playButton, R.drawable.ic_tv_play);
+        setButtonIcon(watchLaterButton, R.drawable.ic_tv_watch_later);
+        setButtonIcon(likeButton, R.drawable.ic_tv_like);
+        setButtonIcon(coinButton, R.drawable.ic_tv_coin);
+        setButtonIcon(favoriteButton, R.drawable.ic_tv_favorite);
+        addButton(buttonsRow, playButton);
+        addButton(buttonsRow, watchLaterButton);
+        addButton(buttonsRow, likeButton);
+        addButton(buttonsRow, coinButton);
+        addButton(buttonsRow, favoriteButton);
 
         playButton.setOnClickListener(v -> openPlayer());
         // 明确焦点上下关系：播放 ↑→ UP 行，UP 行 ↓→ 播放（避免几何搜索落到投币）。
@@ -259,10 +261,12 @@ public final class VideoDetailActivity extends Activity {
 
         statusView = text("正在加载视频详情…", 20, 0xffb7c2c8, false);
         statusView.setGravity(Gravity.CENTER);
-        statusView.setPadding(0, (int) dp(60), 0, (int) dp(60));
-        statusView.setFocusable(true);
-        statusView.setClickable(true);
-        content.addView(statusView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        statusView.setPadding((int) dp(38), (int) dp(30), (int) dp(38), (int) dp(30));
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(190));
+        statusParams.setMargins((int) dp(390), (int) dp(280), (int) dp(390), (int) dp(20));
+        content.addView(statusView, statusParams);
+        setStatusState("正在加载视频详情…", "请稍候，正在获取视频信息", false, false);
+        setDetailContentVisible(false);
         statusView.setOnClickListener(v -> loadDetail());
 
         setContentView(root);
@@ -271,25 +275,28 @@ public final class VideoDetailActivity extends Activity {
     private void loadDetail() {
         if (loading || destroyed) return;
         if (target.isEmpty()) {
-            showStatus("无效的视频地址");
+            setStatusState("无效的视频地址", "请返回上一页后重新进入", false, true);
             return;
         }
         loading = true;
+        setDetailContentVisible(false);
         relatedSection.setVisibility(View.GONE);
         relatedRow.removeAllViews();
         sectionTitleView.setText("推荐");
         showingParts = false;
-        showStatus("正在加载视频详情…");
+        setStatusState("正在加载视频详情…", "请稍候，正在获取视频信息", false, false);
         repository.loadVideoDetail(target, (detail, error) -> {
             if (destroyed) return;
             loading = false;
             if (detail == null) {
-                showStatus(error == null || error.isEmpty() ? "视频详情加载失败" : error);
+                setStatusState(error == null || error.isEmpty() ? "视频详情加载失败" : error,
+                        "检查网络后按 OK 重新加载", true, true);
                 return;
             }
             this.detail = detail;
             aid = detail.aid;
             bvid = detail.bvid == null ? "" : detail.bvid;
+            setDetailContentVisible(true);
             renderDetail(detail);
             statusView.setVisibility(View.GONE);
             playButton.requestFocus();
@@ -516,10 +523,22 @@ public final class VideoDetailActivity extends Activity {
         };
     }
 
-    private void showStatus(String message) {
-        statusView.setText(message + "\n按 OK 重试");
+    private void setStatusState(String title, String hint, boolean actionable, boolean error) {
+        statusView.setText(title + (hint == null || hint.isEmpty() ? "" : "\n" + hint));
+        statusView.setTextColor(error ? 0xffffa9c4 : 0xffd6e1e6);
+        statusView.setLineSpacing(dp(11), 1f);
+        statusView.setFocusable(actionable);
+        statusView.setClickable(actionable);
+        statusView.setBackground(statusBackground(actionable));
         statusView.setVisibility(View.VISIBLE);
-        statusView.requestFocus();
+        if (actionable) statusView.requestFocus();
+    }
+
+    private void setDetailContentVisible(boolean visible) {
+        int visibility = visible ? View.VISIBLE : View.GONE;
+        if (topSection != null) topSection.setVisibility(visibility);
+        if (buttonsRow != null) buttonsRow.setVisibility(visibility);
+        if (!visible && relatedSection != null) relatedSection.setVisibility(View.GONE);
     }
 
     private TextView actionButton(String label, boolean primary) {
@@ -560,6 +579,21 @@ public final class VideoDetailActivity extends Activity {
         normal.setColor(primary ? 0xfffb5c91 : 0xff1e2a33);
         normal.setCornerRadius(dp(16));
         normal.setStroke((int) dp(1), primary ? 0xffffa8c3 : 0xff35434e);
+        drawable.addState(new int[]{android.R.attr.state_focused}, focused);
+        drawable.addState(new int[]{}, normal);
+        return drawable;
+    }
+
+    private StateListDrawable statusBackground(boolean actionable) {
+        StateListDrawable drawable = new StateListDrawable();
+        GradientDrawable focused = new GradientDrawable();
+        focused.setColor(0xee18232d);
+        focused.setCornerRadius(dp(24));
+        focused.setStroke((int) dp(5), 0xfffb5c91);
+        GradientDrawable normal = new GradientDrawable();
+        normal.setColor(0xd918232d);
+        normal.setCornerRadius(dp(24));
+        normal.setStroke((int) dp(actionable ? 2 : 1), actionable ? 0x88fb5c91 : 0x337b8b95);
         drawable.addState(new int[]{android.R.attr.state_focused}, focused);
         drawable.addState(new int[]{}, normal);
         return drawable;

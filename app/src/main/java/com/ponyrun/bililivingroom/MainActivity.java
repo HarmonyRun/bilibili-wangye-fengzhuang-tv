@@ -2,6 +2,7 @@ package com.ponyrun.bililivingroom;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.animation.ValueAnimator;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
@@ -28,10 +29,12 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -77,7 +80,7 @@ public final class MainActivity extends Activity {
         private static final int COLOR_TEXT = 0xff13212b;
         private static final int COLOR_MUTED = 0xff60717c;
         private static final int COLOR_PINK = 0xfffb5c91;
-        private static final int COLOR_FOCUS = 0xff16202a;
+        private static final int COLOR_FOCUS = 0x66fb5c91;
         private static final int COLOR_CARD = 0xeaffffff;
         private static final int COLOR_CARD_SOFT = 0xd8ffffff;
         private final BiliRepository repository = new BiliRepository();
@@ -93,6 +96,7 @@ public final class MainActivity extends Activity {
         private final String[] searchFilters = {"全部", "视频", "番剧", "影视", "主播", "直播间", "用户"};
         private final String[] searchTypes = {"all", "video", "media_bangumi", "media_ft", "live_user", "live_room", "bili_user"};
         private final PlaybackSettings settings = new PlaybackSettings(MainActivity.this);
+        private final PlaybackResume playbackResume = new PlaybackResume(MainActivity.this);
         private final SearchHistory searchHistory = new SearchHistory(MainActivity.this);
         private final List<String> suggestHistory = new ArrayList<>();
         private final List<String> hotKeywords = new ArrayList<>();
@@ -128,6 +132,9 @@ public final class MainActivity extends Activity {
         private boolean destroyed;
         private boolean lastSessionState = BiliAuthRepository.hasSession();
         private final RectF reusable = new RectF();
+        private ValueAnimator gridFocusAnimator;
+        private int previousGridIndex = -1;
+        private float gridFocusProgress = 1f;
 
         BiliTvView() {
             super(MainActivity.this);
@@ -136,6 +143,50 @@ public final class MainActivity extends Activity {
             requestFocus();
             textPaint.setTypeface(android.graphics.Typeface.create("sans", android.graphics.Typeface.NORMAL));
             loadRecommend();
+        }
+
+        private void animateGridFocus(int oldArea, int oldIndex) {
+            if (gridFocusAnimator != null) gridFocusAnimator.cancel();
+            previousGridIndex = oldArea == AREA_GRID && oldIndex != gridIndex ? oldIndex : -1;
+            gridFocusProgress = 0f;
+            gridFocusAnimator = ValueAnimator.ofFloat(0f, 1f);
+            gridFocusAnimator.setDuration(170L);
+            gridFocusAnimator.setInterpolator(new DecelerateInterpolator(1.8f));
+            gridFocusAnimator.addUpdateListener(animation -> {
+                gridFocusProgress = (float) animation.getAnimatedValue();
+                invalidate();
+            });
+            gridFocusAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(android.animation.Animator animation) {
+                    gridFocusProgress = 1f;
+                    previousGridIndex = -1;
+                    invalidate();
+                }
+            });
+            gridFocusAnimator.start();
+        }
+
+        private void finishFocusMove(int oldArea, int oldIndex) {
+            if (area == AREA_GRID && (oldArea != AREA_GRID || oldIndex != gridIndex)) {
+                animateGridFocus(oldArea, oldIndex);
+            } else if (area != AREA_GRID && gridFocusAnimator != null) {
+                gridFocusAnimator.cancel();
+                previousGridIndex = -1;
+                gridFocusProgress = 1f;
+            }
+        }
+
+        private float gridFocusAmount(int index) {
+            if (area != AREA_GRID) return 0f;
+            if (index == gridIndex) return gridFocusProgress;
+            if (index == previousGridIndex) return 1f - gridFocusProgress;
+            return 0f;
+        }
+
+        private int focusColor(int color, float amount) {
+            float value = Math.max(0f, Math.min(1f, amount));
+            return Color.argb(Math.round(Color.alpha(color) * value),
+                    Color.red(color), Color.green(color), Color.blue(color));
         }
 
         private void onHostResume() {
@@ -356,8 +407,30 @@ public final class MainActivity extends Activity {
             lastLoadAction = this::loadFavorites;
             resetPagination();
             if (!preparePrivatePage("正在同步收藏视频…")) return;
+            ensureAccountProfileForFavorites();
             final int generation = ++pageRequestGeneration;
             repository.loadFavoritesPage("", result -> { if (generation == pageRequestGeneration) applyFirstPageResult(result); });
+        }
+
+        private void ensureAccountProfileForFavorites() {
+            if (accountProfile != null || profileLoading) return;
+            final int generation = ++profileRequestGeneration;
+            profileLoading = true;
+            profileError = "";
+            repository.loadAccountProfile((profile, error) -> {
+                if (destroyed || generation != profileRequestGeneration) return;
+                profileLoading = false;
+                accountProfile = profile;
+                profileError = profile == null ? (error == null ? "" : error) : "";
+                invalidate();
+                if (profile != null && profile.face != null && !profile.face.isEmpty()) {
+                    repository.loadImage(profile.face, bitmap -> {
+                        if (destroyed || generation != profileRequestGeneration || bitmap == null) return;
+                        profileFace = bitmap;
+                        invalidate();
+                    });
+                }
+            });
         }
 
         private void loadPersonalVideos(int mode) {
@@ -646,6 +719,7 @@ public final class MainActivity extends Activity {
 
         void shutdown() {
             destroyed = true;
+            if (gridFocusAnimator != null) gridFocusAnimator.cancel();
             repository.shutdown();
         }
 
@@ -668,13 +742,27 @@ public final class MainActivity extends Activity {
                 drawPrivateEmpty(c, w, h);
                 return;
             }
-            float top = h * .34f;
-            float bottom = h * .63f;
-            rounded(c, w * .31f, top, w * .69f, bottom, dp(28), COLOR_CARD);
-            stroke(c, w * .31f, top, w * .69f, bottom, dp(28), 0x1813212b, dp(1));
-            label(c, status, w / 2f, top + (bottom - top) * .36f, dp(26), COLOR_TEXT, Paint.Align.CENTER, true);
-            rounded(c, w / 2f - dp(105), top + (bottom - top) * .51f, w / 2f + dp(105), top + (bottom - top) * .73f, dp(23), COLOR_PINK);
-            label(c, "按确认键重试", w / 2f, top + (bottom - top) * .66f, dp(17), Color.WHITE, Paint.Align.CENTER, true);
+            boolean error = isErrorMessage(status);
+            drawStatePanel(c, w, h, h * .35f, status,
+                    error ? "检查网络或账号状态后重新加载" : "这里暂时没有可显示的内容",
+                    canRetryEmptyState() ? "按 OK 重新加载" : "", error);
+        }
+
+        private void drawStatePanel(Canvas c, float w, float h, float top, String title,
+                                    String hint, String action, boolean error) {
+            float left = w * .30f;
+            float right = w * .70f;
+            float bottom = Math.min(h - dp(70), top + dp(action == null || action.isEmpty() ? 210 : 255));
+            rounded(c, left, top, right, bottom, dp(28), 0xeeffffff);
+            stroke(c, left, top, right, bottom, dp(28), 0x1813212b, dp(1));
+            rounded(c, left + dp(28), top + dp(28), left + dp(108), top + dp(34), dp(3), error ? COLOR_PINK : 0xff8ed9e8);
+            label(c, ellipsize(title == null || title.isEmpty() ? "暂时没有内容" : title, 30), w / 2f,
+                    top + dp(91), dp(25), error ? 0xff8a3b55 : COLOR_TEXT, Paint.Align.CENTER, true);
+            label(c, hint, w / 2f, top + dp(130), dp(16), COLOR_MUTED, Paint.Align.CENTER, false);
+            if (action != null && !action.isEmpty()) {
+                rounded(c, w / 2f - dp(116), bottom - dp(76), w / 2f + dp(116), bottom - dp(25), dp(25), COLOR_PINK);
+                label(c, action, w / 2f, bottom - dp(43), dp(16), Color.WHITE, Paint.Align.CENTER, true);
+            }
         }
 
         private void logout() {
@@ -746,8 +834,8 @@ public final class MainActivity extends Activity {
                 boolean focused = area == AREA_NAV && i == navIndex;
                 if (selected) rounded(c, left + cell * i + dp(5), top + dp(5), left + cell * (i + 1) - dp(5), top + height - dp(5), dp(34), COLOR_PINK);
                 if (focused) {
-                    stroke(c, left + cell * i + dp(1), top + dp(1), left + cell * (i + 1) - dp(1), top + height - dp(1), dp(39), COLOR_FOCUS, dp(4));
-                    stroke(c, left + cell * i + dp(7), top + dp(7), left + cell * (i + 1) - dp(7), top + height - dp(7), dp(32), 0xffffb3ca, dp(2));
+                    stroke(c, left + cell * i + dp(1), top + dp(1), left + cell * (i + 1) - dp(1), top + height - dp(1), dp(39), 0x55fb5c91, dp(7));
+                    stroke(c, left + cell * i + dp(7), top + dp(7), left + cell * (i + 1) - dp(7), top + height - dp(7), dp(32), 0xeaffffff, dp(2));
                 }
                 label(c, nav[i], left + cell * (i + .5f), top + dp(52), dp(24), selected ? Color.WHITE : COLOR_TEXT, Paint.Align.CENTER, selected);
             }
@@ -770,8 +858,15 @@ public final class MainActivity extends Activity {
                 drawDynamicGallery(c, w, h);
                 return;
             }
+            if (navIndex == 5 && BiliAuthRepository.hasSession() && !videos.isEmpty()) {
+                drawFavoritesGallery(c, w, h);
+                return;
+            }
             if (!hasFilters()) {
-                if (loading && videos.isEmpty()) { label(c, "内容正在路上", w / 2f, h * .52f, dp(28), Color.rgb(76, 104, 110), Paint.Align.CENTER, true); return; }
+                if (loading && videos.isEmpty()) {
+                    drawStatePanel(c, w, h, h * .36f, "内容正在路上", status.isEmpty() ? "请稍候" : status, "", false);
+                    return;
+                }
                 if (videos.isEmpty()) { drawEmptyOrError(c, w, h); return; }
                 drawGrid(c, w, h); return;
             }
@@ -785,17 +880,73 @@ public final class MainActivity extends Activity {
                 int bg = i == filterIndex ? COLOR_PINK : COLOR_CARD_SOFT;
                 rounded(c, left + i * (pillW + gap), filterTop, left + i * (pillW + gap) + pillW, filterTop + dp(60), dp(30), bg);
                 if (focused) {
-                    stroke(c, left + i * (pillW + gap) - dp(3), filterTop - dp(3), left + i * (pillW + gap) + pillW + dp(3), filterTop + dp(63), dp(33), COLOR_FOCUS, dp(4));
-                    stroke(c, left + i * (pillW + gap), filterTop, left + i * (pillW + gap) + pillW, filterTop + dp(60), dp(30), COLOR_PINK, dp(2));
+                    stroke(c, left + i * (pillW + gap) - dp(3), filterTop - dp(3), left + i * (pillW + gap) + pillW + dp(3), filterTop + dp(63), dp(33), 0x55fb5c91, dp(7));
+                    stroke(c, left + i * (pillW + gap), filterTop, left + i * (pillW + gap) + pillW, filterTop + dp(60), dp(30), 0xeaffffff, dp(2));
                 }
                 label(c, activeFilters[i], left + i * (pillW + gap) + pillW / 2f, filterTop + dp(39), dp(19), i == filterIndex ? Color.WHITE : COLOR_TEXT, Paint.Align.CENTER, focused || i == filterIndex);
             }
             if (loading && videos.isEmpty()) {
-                label(c, "内容正在路上", w / 2f, h * .55f, dp(28), Color.rgb(76, 104, 110), Paint.Align.CENTER, true);
+                drawStatePanel(c, w, h, h * .38f, "内容正在路上", status.isEmpty() ? "请稍候" : status, "", false);
                 return;
             }
             if (videos.isEmpty()) { drawEmptyOrError(c, w, h); return; }
             drawGrid(c, w, h);
+        }
+
+        private void drawFavoritesGallery(Canvas c, float w, float h) {
+            float panelLeft = dp(52), panelTop = dp(150), panelRight = dp(515), panelBottom = h - dp(58);
+            rounded(c, panelLeft, panelTop, panelRight, panelBottom, dp(28), 0xeaffffff);
+            stroke(c, panelLeft, panelTop, panelRight, panelBottom, dp(28), 0x1813212b, dp(1));
+
+            float avatarSize = dp(94);
+            float avatarLeft = panelLeft + dp(28);
+            float avatarTop = panelTop + dp(30);
+            drawProfileFace(c, avatarLeft, avatarTop, avatarSize);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(4));
+            paint.setColor(Color.WHITE);
+            c.drawCircle(avatarLeft + avatarSize / 2f, avatarTop + avatarSize / 2f, avatarSize / 2f + dp(2), paint);
+            paint.setStyle(Paint.Style.FILL);
+            float textLeft = avatarLeft + avatarSize + dp(20);
+            if (accountProfile != null) {
+                label(c, ellipsize(accountProfile.name.isEmpty() ? "B 站用户" : accountProfile.name, 10),
+                        textLeft, panelTop + dp(72), dp(25), COLOR_TEXT, Paint.Align.LEFT, true);
+                label(c, "LV" + accountProfile.level + (accountProfile.vip ? "  VIP" : ""), textLeft,
+                        panelTop + dp(103), dp(14), accountProfile.vip ? COLOR_PINK : COLOR_MUTED, Paint.Align.LEFT, false);
+            } else {
+                label(c, profileLoading ? "正在加载账号…" : "B 站账号", textLeft,
+                        panelTop + dp(76), dp(19), COLOR_TEXT, Paint.Align.LEFT, true);
+            }
+
+            String[] statLabels = {"硬币", "关注", "粉丝"};
+            long[] values = accountProfile == null ? new long[]{0, 0, 0}
+                    : new long[]{accountProfile.coins, accountProfile.following, accountProfile.fans};
+            float statTop = panelTop + dp(154);
+            float statCol = (panelRight - panelLeft - dp(40)) / 3f;
+            for (int i = 0; i < statLabels.length; i++) {
+                float cx = panelLeft + dp(20) + statCol * i + statCol / 2f;
+                label(c, accountProfile == null ? "—" : formatNumber(values[i]), cx, statTop + dp(24), dp(22), COLOR_TEXT, Paint.Align.CENTER, true);
+                label(c, statLabels[i], cx, statTop + dp(50), dp(13), COLOR_MUTED, Paint.Align.CENTER, false);
+            }
+
+            label(c, "收藏内容", panelLeft + dp(24), panelTop + dp(250), dp(18), COLOR_MUTED, Paint.Align.LEFT, true);
+            float rowLeft = panelLeft + dp(20), rowRight = panelRight - dp(20), rowTop = panelTop + dp(274);
+            rounded(c, rowLeft, rowTop, rowRight, rowTop + dp(70), dp(20), 0xffffe8f0);
+            rounded(c, rowLeft + dp(14), rowTop + dp(14), rowLeft + dp(56), rowTop + dp(56), dp(21), 0xffffd6e4);
+            drawSystemIcon(c, R.drawable.ic_tv_favorite, rowLeft + dp(24), rowTop + dp(24), dp(22), COLOR_PINK);
+            label(c, "默认收藏夹", rowLeft + dp(72), rowTop + dp(43), dp(20), COLOR_PINK, Paint.Align.LEFT, true);
+            label(c, "已加载 " + videos.size(), rowRight - dp(18), rowTop + dp(43), dp(15), COLOR_PINK, Paint.Align.RIGHT, true);
+
+            float infoTop = rowTop + dp(100);
+            rounded(c, rowLeft, infoTop, rowRight, infoTop + dp(118), dp(20), 0xfff7fafb);
+            label(c, "当前视图", rowLeft + dp(22), infoTop + dp(34), dp(15), COLOR_MUTED, Paint.Align.LEFT, false);
+            label(c, "全部收藏视频", rowLeft + dp(22), infoTop + dp(66), dp(20), COLOR_TEXT, Paint.Align.LEFT, true);
+            label(c, "按收藏时间排列", rowLeft + dp(22), infoTop + dp(96), dp(14), COLOR_MUTED, Paint.Align.LEFT, false);
+
+            float gridLeft = dp(555);
+            label(c, "我的收藏", gridLeft, dp(174), dp(30), COLOR_TEXT, Paint.Align.LEFT, true);
+            label(c, "已加载 " + videos.size() + " 个视频", gridLeft, dp(207), dp(15), COLOR_MUTED, Paint.Align.LEFT, false);
+            drawThreeColumnGallery(c, w, h, gridLeft, dp(52), dp(18), dp(20), dp(238));
         }
 
         private void drawDynamicGallery(Canvas c, float w, float h) {
@@ -819,28 +970,52 @@ public final class MainActivity extends Activity {
                 label(c, ellipsize(item.owner, 8), cx, avatarTop + dp(112), dp(15), COLOR_TEXT, Paint.Align.CENTER, true);
             }
 
-            float left = dp(52), right = dp(52), gap = dp(22), top = dp(292);
-            float itemW = (w - left - right - gap * 2) / 3f;
-            float imageH = dp(260);
-            float cardStepY = imageH + dp(100);
-            int count = Math.min(videos.size(), 6);
+            float left = dp(52), right = dp(52), gap = dp(22), top = dp(300);
+            float available = w - left - right - gap * 2;
+            int start = firstRow * 3;
+            int count = Math.min(videos.size(), start + 9);
             for (int pass = 0; pass < 2; pass++) {
-                for (int i = 0; i < count; i++) {
-                    boolean focused = area == AREA_GRID && gridIndex == i;
-                    if ((pass == 0 && focused) || (pass == 1 && !focused)) continue;
-                    int row = i / 3, col = i % 3;
-                    float x = left + col * (itemW + gap);
-                    float y = top + row * cardStepY;
-                    float grow = focused ? dp(16) : 0;
-                    drawDynamicCard(c, videos.get(i), x - grow, y - grow, itemW + grow * 2,
-                            imageH + grow * 2, focused);
+                for (int i = start; i < count; i++) {
+                    boolean current = area == AREA_GRID && gridIndex == i;
+                    if ((pass == 0 && current) || (pass == 1 && !current)) continue;
+                    int globalRow = i / 3, col = i % 3;
+                    float y = top;
+                    for (int row = firstRow; row < globalRow; row++) {
+                        y += dynamicRowHeight(available, row) + gap;
+                    }
+                    float totalWeight = 0f;
+                    float beforeWeight = 0f;
+                    for (int slot = 0; slot < 3; slot++) {
+                        float weight = 1f + .62f * gridFocusAmount(globalRow * 3 + slot);
+                        totalWeight += weight;
+                        if (slot < col) beforeWeight += weight;
+                    }
+                    float focus = gridFocusAmount(i);
+                    float cardW = available * (1f + .62f * focus) / totalWeight;
+                    float x = left + available * beforeWeight / totalWeight + col * gap;
+                    boolean activeRow = area == AREA_GRID && gridIndex / 3 == globalRow;
+                    float imageH = activeRow ? dp(230) + dp(90) * focus : cardW * .42f;
+                    drawDynamicCard(c, videos.get(i), x, y - dp(6) * focus, cardW, imageH, focus);
                 }
             }
             drawGridFooter(c, w, h);
         }
 
+        private float dynamicRowHeight(float available, int globalRow) {
+            boolean activeRow = area == AREA_GRID && gridIndex / 3 == globalRow;
+            if (activeRow) {
+                float maxFocus = 0f;
+                for (int slot = 0; slot < 3; slot++) {
+                    maxFocus = Math.max(maxFocus, gridFocusAmount(globalRow * 3 + slot));
+                }
+                return dp(230) + dp(90) * maxFocus + dp(78);
+            }
+            return (available / 3f) * .42f + dp(78);
+        }
+
         private void drawDynamicCard(Canvas c, VideoItem item, float x, float y, float cardW,
-                                     float imageH, boolean focused) {
+                                     float imageH, float focus) {
+            boolean focused = focus > .02f;
             boolean live = "dynamic_live".equals(item.kind);
             boolean forward = "dynamic_forward".equals(item.kind);
             boolean article = "dynamic_article".equals(item.kind);
@@ -850,8 +1025,8 @@ public final class MainActivity extends Activity {
             rounded(c, x, y, x + cardW, y + imageH + footerH, dp(18), focused ? 0xffffffff : COLOR_CARD);
             stroke(c, x, y, x + cardW, y + imageH + footerH, dp(18), 0x1813212b, dp(1));
             if (focused) {
-                stroke(c, x - dp(5), y - dp(5), x + cardW + dp(5), y + imageH + footerH + dp(5), dp(23), COLOR_FOCUS, dp(5));
-                stroke(c, x - dp(1), y - dp(1), x + cardW + dp(1), y + imageH + footerH + dp(1), dp(19), COLOR_PINK, dp(2));
+                stroke(c, x - dp(7), y - dp(7), x + cardW + dp(7), y + imageH + footerH + dp(7), dp(25), focusColor(COLOR_FOCUS, focus), dp(9));
+                stroke(c, x - dp(1), y - dp(1), x + cardW + dp(1), y + imageH + footerH + dp(1), dp(19), focusColor(COLOR_PINK, focus), dp(2));
             }
             reusable.set(x, y, x + cardW, y + imageH);
             Bitmap coverBitmap = bitmaps.get(item.coverUrl);
@@ -881,7 +1056,8 @@ public final class MainActivity extends Activity {
                 label(c, live ? "直播中" : item.duration, x + cardW - dp(14), y + imageH - dp(13), dp(13), Color.WHITE, Paint.Align.RIGHT, true);
             }
             drawRoundImage(c, bitmaps.get(item.avatarUrl), x + dp(34), y + imageH + dp(38), dp(22), item.owner);
-            label(c, ellipsize(item.title, cardW > dp(650) ? 30 : 20), x + dp(68), y + imageH + dp(31), dp(18), COLOR_TEXT, Paint.Align.LEFT, true);
+            int titleChars = Math.max(20, Math.min(28, Math.round(cardW / dp(24))));
+            label(c, ellipsize(item.title, titleChars), x + dp(68), y + imageH + dp(31), dp(18), COLOR_TEXT, Paint.Align.LEFT, true);
             label(c, ellipsize(item.owner, 12) + "  " + item.published, x + dp(68), y + imageH + dp(58), dp(14), COLOR_MUTED, Paint.Align.LEFT, false);
         }
 
@@ -923,15 +1099,20 @@ public final class MainActivity extends Activity {
                 float showcaseImageH = showcaseW * .56f;
                 for (int pass = 0; pass < 2; pass++) {
                     for (int i = 0; i < videos.size(); i++) {
-                        boolean focused = area == AREA_GRID && i == gridIndex;
-                        if ((pass == 0 && focused) || (pass == 1 && !focused)) continue;
+                        boolean current = area == AREA_GRID && i == gridIndex;
+                        if ((pass == 0 && current) || (pass == 1 && !current)) continue;
                         float x = left + i * (showcaseW + gapX);
-                        float grow = focused ? dp(16) : 0;
+                        float focus = gridFocusAmount(i);
+                        float grow = dp(22) * focus;
                         drawVideoCard(c, videos.get(i), x - grow, top - grow,
-                                showcaseW + grow * 2, showcaseImageH + grow * 2, focused);
+                                showcaseW + grow * 2, showcaseImageH + grow * 2, focus);
                     }
                 }
                 drawGridFooter(c, w, h);
+                return;
+            }
+            if (cols == 3) {
+                drawThreeColumnGallery(c, w, h, left, right, gapX, gapY, top);
                 return;
             }
             float cardW = (w - left - right - gapX * (cols - 1)) / cols;
@@ -942,19 +1123,80 @@ public final class MainActivity extends Activity {
             int end = Math.min(videos.size(), start + visibleRows * cols);
             for (int pass = 0; pass < 2; pass++) {
                 for (int i = start; i < end; i++) {
-                    boolean focused = area == AREA_GRID && i == gridIndex;
-                    if ((pass == 0 && focused) || (pass == 1 && !focused)) continue;
+                    boolean current = area == AREA_GRID && i == gridIndex;
+                    if ((pass == 0 && current) || (pass == 1 && !current)) continue;
                     int local = i - start;
                     int row = local / cols;
                     int col = local % cols;
                     float x = left + col * (cardW + gapX);
                     float y = top + row * (cardH + gapY);
-                    float grow = focused ? dp(16) : 0;
+                    float focus = gridFocusAmount(i);
+                    float grow = dp(22) * focus;
                     drawVideoCard(c, videos.get(i), x - grow, y - grow,
-                            cardW + grow * 2, imageH + grow * 2, focused);
+                            cardW + grow * 2, imageH + grow * 2, focus);
                 }
             }
             drawGridFooter(c, w, h);
+        }
+
+        /**
+         * Apple TV 式三列画廊：未聚焦时三张等宽；聚焦后当前卡逐帧扩展，
+         * 同行其余卡逐帧收窄。宽度权重总和恒定，因此焦点移动时不会挤出屏幕。
+         */
+        private void drawThreeColumnGallery(Canvas c, float w, float h, float left, float right,
+                                            float gapX, float gapY, float top) {
+            final int cols = 3;
+            float available = w - left - right - gapX * (cols - 1);
+            boolean compact = available < dp(1500);
+            float focusedBaseImageH = compact ? dp(200) : dp(260);
+            float focusedBonusImageH = compact ? dp(72) : dp(90);
+            float regularImageRatio = compact ? .52f : .46f;
+            int start = firstRow * cols;
+            int visibleRows = 3;
+            int end = Math.min(videos.size(), start + visibleRows * cols);
+            for (int pass = 0; pass < 2; pass++) {
+                for (int i = start; i < end; i++) {
+                    boolean current = area == AREA_GRID && i == gridIndex;
+                    if ((pass == 0 && current) || (pass == 1 && !current)) continue;
+                    int globalRow = i / cols;
+                    int col = i % cols;
+                    float rowTop = top;
+                    for (int row = firstRow; row < globalRow; row++) {
+                        rowTop += threeColumnRowHeight(available, row) + gapY;
+                    }
+                    float totalWeight = 0f;
+                    float beforeWeight = 0f;
+                    for (int slot = 0; slot < cols; slot++) {
+                        float weight = 1f + .62f * gridFocusAmount(globalRow * cols + slot);
+                        totalWeight += weight;
+                        if (slot < col) beforeWeight += weight;
+                    }
+                    float focus = gridFocusAmount(i);
+                    float cardW = available * (1f + .62f * focus) / totalWeight;
+                    float x = left + available * beforeWeight / totalWeight + col * gapX;
+                    boolean activeRow = area == AREA_GRID && gridIndex / cols == globalRow;
+                    float imageH = activeRow ? focusedBaseImageH + focusedBonusImageH * focus : cardW * regularImageRatio;
+                    float lift = dp(6) * focus;
+                    drawVideoCard(c, videos.get(i), x, rowTop - lift, cardW, imageH, focus);
+                }
+            }
+            drawGridFooter(c, w, h);
+        }
+
+        private float threeColumnRowHeight(float available, int globalRow) {
+            boolean compact = available < dp(1500);
+            float focusedBaseImageH = compact ? dp(200) : dp(260);
+            float focusedBonusImageH = compact ? dp(72) : dp(90);
+            float regularImageRatio = compact ? .52f : .46f;
+            boolean activeRow = area == AREA_GRID && gridIndex / 3 == globalRow;
+            if (activeRow) {
+                float maxFocus = 0f;
+                for (int slot = 0; slot < 3; slot++) {
+                    maxFocus = Math.max(maxFocus, gridFocusAmount(globalRow * 3 + slot));
+                }
+                return focusedBaseImageH + focusedBonusImageH * maxFocus + dp(82);
+            }
+            return (available / 3f) * regularImageRatio + dp(82);
         }
 
         private void drawGridFooter(Canvas c, float w, float h) {
@@ -978,12 +1220,13 @@ public final class MainActivity extends Activity {
             label(c, text, right - dp(17), baseline, size, 0xff52676c, Paint.Align.RIGHT, false);
         }
 
-        private void drawVideoCard(Canvas c, VideoItem item, float x, float y, float cardW, float imageH, boolean focused) {
+        private void drawVideoCard(Canvas c, VideoItem item, float x, float y, float cardW, float imageH, float focus) {
+            boolean focused = focus > .02f;
             rounded(c, x, y, x + cardW, y + imageH + dp(75), dp(17), focused ? 0xffffffff : COLOR_CARD);
             stroke(c, x, y, x + cardW, y + imageH + dp(75), dp(17), 0x1813212b, dp(1));
             if (focused) {
-                stroke(c, x - dp(5), y - dp(5), x + cardW + dp(5), y + imageH + dp(80), dp(22), COLOR_FOCUS, dp(5));
-                stroke(c, x - dp(1), y - dp(1), x + cardW + dp(1), y + imageH + dp(76), dp(18), COLOR_PINK, dp(2));
+                stroke(c, x - dp(7), y - dp(7), x + cardW + dp(7), y + imageH + dp(82), dp(24), focusColor(COLOR_FOCUS, focus), dp(9));
+                stroke(c, x - dp(1), y - dp(1), x + cardW + dp(1), y + imageH + dp(76), dp(18), focusColor(COLOR_PINK, focus), dp(2));
             }
             reusable.set(x, y, x + cardW, y + imageH);
             Bitmap bitmap = bitmaps.get(item.coverUrl);
@@ -1006,7 +1249,8 @@ public final class MainActivity extends Activity {
                         navIndex == 4 ? 0xe616202a : COLOR_PINK);
                 label(c, badge, x + dp(10) + badgeW / 2f, y + dp(29), dp(12), Color.WHITE, Paint.Align.CENTER, true);
             }
-            label(c, ellipsize(item.title, 21), x + dp(12), y + imageH + dp(30), dp(19), COLOR_TEXT, Paint.Align.LEFT, true);
+            int titleChars = Math.max(21, Math.min(28, Math.round(cardW / dp(24))));
+            label(c, ellipsize(item.title, titleChars), x + dp(12), y + imageH + dp(30), dp(19), COLOR_TEXT, Paint.Align.LEFT, true);
             label(c, ellipsize(item.owner, 16), x + dp(12), y + imageH + dp(60), dp(14), COLOR_MUTED, Paint.Align.LEFT, false);
         }
 
@@ -1114,18 +1358,18 @@ public final class MainActivity extends Activity {
                 float y = menuTop + i * (rowH + dp(10));
                 boolean focused = area == AREA_SIDEBAR && sidebarIndex == i;
                 boolean active = i == rootSection;
-                int rowColor = focused ? COLOR_FOCUS : active ? 0xffffe8f0 : 0x00ffffff;
+                int rowColor = focused ? 0xffffe8f0 : active ? 0xffffe8f0 : 0x00ffffff;
                 rounded(c, rowLeft, y, rowRight, y + rowH, dp(16), rowColor);
                 if (focused) {
-                    stroke(c, rowLeft - dp(3), y - dp(3), rowRight + dp(3), y + rowH + dp(3), dp(19), COLOR_FOCUS, dp(3));
-                    stroke(c, rowLeft + dp(1), y + dp(1), rowRight - dp(1), y + rowH - dp(1), dp(15), COLOR_PINK, dp(2));
+                    stroke(c, rowLeft - dp(3), y - dp(3), rowRight + dp(3), y + rowH + dp(3), dp(19), 0x55fb5c91, dp(7));
+                    stroke(c, rowLeft + dp(1), y + dp(1), rowRight - dp(1), y + rowH - dp(1), dp(15), 0xffffffff, dp(2));
                 }
-                int color = i == sidebarMenu.length - 1 ? COLOR_PINK : focused ? Color.WHITE : active ? COLOR_PINK : COLOR_TEXT;
-                int iconBg = focused ? 0x2effffff : active ? 0xffffd6e4 : 0xffedf2f4;
+                int color = i == sidebarMenu.length - 1 ? COLOR_PINK : focused || active ? COLOR_PINK : COLOR_TEXT;
+                int iconBg = focused || active ? 0xffffd6e4 : 0xffedf2f4;
                 rounded(c, rowLeft + dp(12), y + dp(10), rowLeft + dp(48), y + dp(46), dp(18), iconBg);
                 drawSystemIcon(c, sidebarIcon(i), rowLeft + dp(20), y + dp(18), dp(20), color);
                 label(c, sidebarMenu[i], rowLeft + dp(62), y + rowH / 2f + dp(7), dp(19), color, Paint.Align.LEFT, focused || active);
-                label(c, "›", rowRight - dp(18), y + rowH / 2f + dp(8), dp(22), focused ? Color.WHITE : COLOR_MUTED, Paint.Align.RIGHT, false);
+                label(c, "›", rowRight - dp(18), y + rowH / 2f + dp(8), dp(22), focused ? COLOR_PINK : COLOR_MUTED, Paint.Align.RIGHT, false);
             }
 
             float gridLeft = dp(640);
@@ -1165,69 +1409,36 @@ public final class MainActivity extends Activity {
             int end = Math.min(videos.size(), start + visibleRows * cols);
             for (int pass = 0; pass < 2; pass++) {
                 for (int i = start; i < end; i++) {
-                    boolean focused = area == AREA_GRID && i == gridIndex;
-                    if ((pass == 0 && focused) || (pass == 1 && !focused)) continue;
+                    boolean current = area == AREA_GRID && i == gridIndex;
+                    if ((pass == 0 && current) || (pass == 1 && !current)) continue;
                     int local = i - start;
                     int row = local / cols;
                     int col = local % cols;
                     float x = gridLeft + col * (cardW + gapX);
                     float y = gridTop + row * (cardH + gapY);
-                    float grow = focused ? dp(16) : 0;
+                    float focus = gridFocusAmount(i);
+                    float grow = dp(18) * focus;
                     drawPersonalContentCard(c, videos.get(i), x - grow, y - grow,
-                            cardW + grow * 2, imageH + grow * 2, focused);
+                            cardW + grow * 2, imageH + grow * 2, focus);
                 }
             }
             drawGridFooter(c, w, h);
         }
 
         private void drawRootSettings(Canvas c, float w, float h) {
-            float left = dp(640);
-            float right = w - dp(56);
-            float top = dp(278);
-            float rowH = dp(78);
-            float gap = dp(14);
-            String[] labels = {"默认弹幕", "自动播放", "优先高清"};
-            String[] notes = {"进入播放器时默认显示弹幕", "打开视频后立即开始播放", "优先选择当前网络可用的高清画质"};
-            boolean[] values = {settings.danmaku(), settings.autoPlay(), settings.highQuality()};
-            label(c, "播放体验", left, top - dp(24), dp(17), COLOR_MUTED, Paint.Align.LEFT, true);
-            for (int i = 0; i < labels.length; i++) {
-                float y = top + i * (rowH + gap) + (i == 2 ? dp(42) : 0);
-                if (i == 2) label(c, "画质偏好", left, y - dp(18), dp(17), COLOR_MUTED, Paint.Align.LEFT, true);
-                boolean focused = area == AREA_GRID && gridIndex == i;
-                rounded(c, left, y, right, y + rowH, dp(18), focused ? COLOR_FOCUS : COLOR_CARD);
-                stroke(c, left, y, right, y + rowH, dp(18), 0x1813212b, dp(1));
-                if (focused) stroke(c, left - dp(3), y - dp(3), right + dp(3), y + rowH + dp(3), dp(21), COLOR_PINK, dp(3));
-                label(c, labels[i], left + dp(26), y + dp(32), dp(21),
-                        focused ? Color.WHITE : Color.rgb(31, 45, 50), Paint.Align.LEFT, true);
-                label(c, notes[i], left + dp(26), y + dp(59), dp(14), focused ? 0xffd7e1e5 : COLOR_MUTED, Paint.Align.LEFT, false);
-                drawToggle(c, right - dp(92), y + dp(21), values[i], focused);
-            }
-            float updateY = top + 3 * (rowH + gap) + dp(42);
-            boolean updateFocused = area == AREA_GRID && gridIndex == 3;
-            rounded(c, left, updateY, right, updateY + rowH, dp(18), updateFocused ? COLOR_FOCUS : COLOR_CARD);
-            stroke(c, left, updateY, right, updateY + rowH, dp(18), 0x1813212b, dp(1));
-            if (updateFocused) stroke(c, left - dp(3), updateY - dp(3), right + dp(3), updateY + rowH + dp(3), dp(21), COLOR_PINK, dp(3));
-            label(c, "检测更新", left + dp(26), updateY + dp(32), dp(21),
-                    updateFocused ? Color.WHITE : Color.rgb(31, 45, 50), Paint.Align.LEFT, true);
-            label(c, "检查 GitHub 上的新版本", left + dp(26), updateY + dp(59), dp(14),
-                    updateFocused ? 0xffd7e1e5 : COLOR_MUTED, Paint.Align.LEFT, false);
-            label(c, BuildConfig.VERSION_NAME + "   ›", right - dp(26), updateY + dp(35), dp(16),
-                    updateFocused ? Color.WHITE : COLOR_MUTED, Paint.Align.RIGHT, false);
-            float bottom = updateY + rowH + dp(22);
-            label(c, "应用版本  " + BuildConfig.VERSION_NAME, left, bottom + dp(24), dp(15), 0xff60747a, Paint.Align.LEFT, false);
-            label(c, "OK 打开检测更新 · ← 返回导航 · ↑ 顶部刷新", left, bottom + dp(52), dp(15), 0xff8a656f, Paint.Align.LEFT, false);
+            drawSettingsGrid(c, dp(640), w - dp(56), dp(278));
         }
 
         private void drawPersonalContentCard(Canvas c, VideoItem item, float x, float y,
-                                             float cardW, float imageH, boolean focused) {
-            drawVideoCard(c, item, x, y, cardW, imageH, focused);
+                                             float cardW, float imageH, float focus) {
+            drawVideoCard(c, item, x, y, cardW, imageH, focus);
             String badge;
             int badgeColor;
             int badgeIcon;
             if ("personal_history".equals(item.kind)) {
                 badge = "历史";
                 badgeColor = 0xff536b78;
-                badgeIcon = android.R.drawable.ic_menu_recent_history;
+                badgeIcon = R.drawable.ic_tv_history;
                 float progress = historyProgress(item.stats, item.duration);
                 rounded(c, x + dp(12), y + imageH - dp(10), x + cardW - dp(12), y + imageH - dp(5), dp(3), 0x90ffffff);
                 if (progress > 0f) rounded(c, x + dp(12), y + imageH - dp(10),
@@ -1235,15 +1446,15 @@ public final class MainActivity extends Activity {
             } else if ("personal_favorite".equals(item.kind)) {
                 badge = "收藏";
                 badgeColor = COLOR_PINK;
-                badgeIcon = android.R.drawable.btn_star_big_on;
+                badgeIcon = R.drawable.ic_tv_favorite;
             } else if ("personal_watchlater".equals(item.kind)) {
                 badge = "待看";
                 badgeColor = 0xff4f7f92;
-                badgeIcon = android.R.drawable.ic_menu_my_calendar;
+                badgeIcon = R.drawable.ic_tv_watch_later;
             } else if ("personal_bangumi".equals(item.kind)) {
                 badge = "追番";
                 badgeColor = 0xff8a668f;
-                badgeIcon = android.R.drawable.ic_menu_view;
+                badgeIcon = R.drawable.ic_tv_bangumi;
             } else {
                 return;
             }
@@ -1258,12 +1469,12 @@ public final class MainActivity extends Activity {
         }
 
         private int sidebarIcon(int index) {
-            if (index == 0) return android.R.drawable.ic_menu_recent_history;
-            if (index == 1) return android.R.drawable.btn_star_big_on;
-            if (index == 2) return android.R.drawable.ic_menu_my_calendar;
-            if (index == 3) return android.R.drawable.ic_menu_view;
-            if (index == 4) return android.R.drawable.ic_menu_preferences;
-            return android.R.drawable.ic_lock_power_off;
+            if (index == 0) return R.drawable.ic_tv_history;
+            if (index == 1) return R.drawable.ic_tv_favorite;
+            if (index == 2) return R.drawable.ic_tv_watch_later;
+            if (index == 3) return R.drawable.ic_tv_bangumi;
+            if (index == 4) return R.drawable.ic_tv_settings;
+            return R.drawable.ic_tv_logout;
         }
 
         private void drawSystemIcon(Canvas c, int resourceId, float left, float top, float size, int color) {
@@ -1364,23 +1575,59 @@ public final class MainActivity extends Activity {
         }
 
         private void drawSettingsPage(Canvas c, float w, float h) {
-            float left = dp(250), right = w - dp(250), top = dp(222);
-            float rowH = dp(86), gap = dp(18);
-            String[] names = {"默认弹幕", "自动播放", "优先高清"};
-            String[] notes = {"进入播放器时默认显示弹幕", "进入视频后自动开始播放", "优先请求可用的高清画质"};
-            boolean[] values = {settings.danmaku(), settings.autoPlay(), settings.highQuality()};
+            drawSettingsGrid(c, dp(92), w - dp(92), dp(230));
+        }
+
+        private void drawSettingsGrid(Canvas c, float left, float right, float top) {
+            String[] names = {"默认弹幕", "弹幕字号", "自动播放", "弹幕透明度", "优先高清", "弹幕速度",
+                    "清除搜索历史", "检测更新", "清除续播进度", "应用信息"};
+            String[] notes = {"进入播放器时默认显示弹幕", "播放器中的弹幕文字大小", "进入视频后自动开始播放", "播放器中的弹幕显示浓度",
+                    "优先请求当前可用的高清画质", "弹幕横向移动的速度", "移除本机保存的搜索词", "检查 GitHub 上的新版本",
+                    "移除本机保存的播放位置", "普通 Android 手机应用身份"};
+            float columnGap = dp(28);
+            float columnW = (right - left - columnGap) / 2f;
+            float rowH = dp(78), rowGap = dp(14);
+            float groupGap = dp(42);
+            label(c, "播放", left, top - dp(22), dp(17), COLOR_MUTED, Paint.Align.LEFT, true);
+            label(c, "弹幕", left + columnW + columnGap, top - dp(22), dp(17), COLOR_MUTED, Paint.Align.LEFT, true);
             for (int i = 0; i < names.length; i++) {
-                float y = top + i * (rowH + gap);
+                int row = i / 2, column = i % 2;
+                float x = left + column * (columnW + columnGap);
+                float y = top + row * (rowH + rowGap) + (row >= 3 ? groupGap : 0f);
+                if (i == 6) label(c, "账户与数据", left, y - dp(18), dp(17), COLOR_MUTED, Paint.Align.LEFT, true);
+                if (i == 7) label(c, "关于", left + columnW + columnGap, y - dp(18), dp(17), COLOR_MUTED, Paint.Align.LEFT, true);
                 boolean focused = area == AREA_GRID && gridIndex == i;
-                rounded(c, left, y, right, y + rowH, dp(22), focused ? COLOR_FOCUS : COLOR_CARD);
-                stroke(c, left, y, right, y + rowH, dp(22), focused ? COLOR_PINK : 0x1813212b, focused ? dp(3) : dp(1));
-                label(c, names[i], left + dp(28), y + dp(38), dp(22), focused ? Color.WHITE : COLOR_TEXT, Paint.Align.LEFT, true);
-                label(c, notes[i], left + dp(28), y + dp(64), dp(14), focused ? 0xffdce4e8 : COLOR_MUTED, Paint.Align.LEFT, false);
-                drawToggle(c, right - dp(98), y + dp(25), values[i], focused);
+                rounded(c, x, y, x + columnW, y + rowH, dp(18), COLOR_CARD);
+                stroke(c, x, y, x + columnW, y + rowH, dp(18), 0x1813212b, dp(1));
+                if (focused) {
+                    stroke(c, x - dp(4), y - dp(4), x + columnW + dp(4), y + rowH + dp(4), dp(22), 0x55fb5c91, dp(7));
+                    stroke(c, x, y, x + columnW, y + rowH, dp(18), 0xff29333c, dp(2));
+                }
+                label(c, names[i], x + dp(24), y + dp(31), dp(20), COLOR_TEXT, Paint.Align.LEFT, true);
+                label(c, notes[i], x + dp(24), y + dp(57), dp(13), COLOR_MUTED, Paint.Align.LEFT, false);
+                if (i == 0) drawToggle(c, x + columnW - dp(88), y + dp(21), settings.danmaku(), focused);
+                else if (i == 2) drawToggle(c, x + columnW - dp(88), y + dp(21), settings.autoPlay(), focused);
+                else if (i == 4) drawToggle(c, x + columnW - dp(88), y + dp(21), settings.highQuality(), focused);
+                else drawSettingValue(c, settingValue(i), x + columnW - dp(24), y + dp(41), focused);
             }
-            float footerY = top + names.length * (rowH + gap) + dp(12);
-            label(c, "哔哩客厅  " + BuildConfig.VERSION_NAME + "  ·  Android 手机版声明", left, footerY, dp(16), COLOR_MUTED, Paint.Align.LEFT, false);
-            label(c, "OK 切换开关  ·  返回键回到我的", right, footerY, dp(15), 0xff8a656f, Paint.Align.RIGHT, false);
+            float footer = top + 5 * (rowH + rowGap) + groupGap + dp(13);
+            label(c, "OK 打开或切换 · 方向键选择 · 返回键回到我的", left, footer, dp(15), 0xff8a656f, Paint.Align.LEFT, false);
+            label(c, "哔哩客厅  " + BuildConfig.VERSION_NAME, right, footer, dp(15), COLOR_MUTED, Paint.Align.RIGHT, false);
+        }
+
+        private void drawSettingValue(Canvas c, String value, float right, float centerY, boolean focused) {
+            float width = Math.max(dp(74), textPaint.measureText(value) + dp(30));
+            rounded(c, right - width, centerY - dp(20), right, centerY + dp(20), dp(20), focused ? 0xffffe5ee : 0xffedf1f3);
+            label(c, value, right - width / 2f, centerY + dp(6), dp(14), focused ? 0xffc83e6c : COLOR_MUTED, Paint.Align.CENTER, true);
+        }
+
+        private String settingValue(int index) {
+            if (index == 1) return new String[]{"小", "中", "大"}[settings.danmakuSize()];
+            if (index == 3) return new String[]{"60%", "80%", "100%"}[settings.danmakuOpacity()];
+            if (index == 5) return new String[]{"慢", "标准", "快"}[settings.danmakuSpeed()];
+            if (index == 7) return BuildConfig.VERSION_NAME + "  ›";
+            if (index == 9) return "手机版声明  ›";
+            return "执行  ›";
         }
 
         private void drawInfoCards(Canvas c, float w, String[] names, String[] notes) {
@@ -1403,8 +1650,8 @@ public final class MainActivity extends Activity {
         private void drawSearchPage(Canvas c, float w, float h) {
             float boxLeft = dp(88), boxTop = dp(140), boxRight = w - dp(88), boxBottom = boxTop + dp(110);
             rounded(c, boxLeft, boxTop, boxRight, boxBottom, dp(30), Color.argb(242, 255, 255, 255));
-            stroke(c, boxLeft, boxTop, boxRight, boxBottom, dp(30), area == AREA_SEARCH ? COLOR_FOCUS : 0xffd7e1e4, area == AREA_SEARCH ? dp(5) : dp(2));
-            if (area == AREA_SEARCH) stroke(c, boxLeft + dp(5), boxTop + dp(5), boxRight - dp(5), boxBottom - dp(5), dp(25), COLOR_PINK, dp(3));
+            stroke(c, boxLeft, boxTop, boxRight, boxBottom, dp(30), area == AREA_SEARCH ? 0x55fb5c91 : 0xffd7e1e4, area == AREA_SEARCH ? dp(7) : dp(2));
+            if (area == AREA_SEARCH) stroke(c, boxLeft + dp(5), boxTop + dp(5), boxRight - dp(5), boxBottom - dp(5), dp(25), 0xeaffffff, dp(2));
             paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(dp(4)); paint.setColor(area == AREA_SEARCH ? COLOR_PINK : COLOR_MUTED);
             c.drawCircle(boxLeft + dp(50), boxTop + dp(49), dp(17), paint);
             c.drawLine(boxLeft + dp(62), boxTop + dp(62), boxLeft + dp(76), boxTop + dp(76), paint); paint.setStyle(Paint.Style.FILL);
@@ -1419,19 +1666,24 @@ public final class MainActivity extends Activity {
                 boolean focused = area == AREA_FILTER && i == filterFocusIndex;
                 int bg = i == filterIndex ? COLOR_PINK : COLOR_CARD_SOFT;
                 rounded(c, left + i * (pillW + gap), top, left + i * (pillW + gap) + pillW, top + dp(48), dp(24), bg);
-                if (focused) stroke(c, left + i * (pillW + gap) - dp(3), top - dp(3), left + i * (pillW + gap) + pillW + dp(3), top + dp(51), dp(27), COLOR_FOCUS, dp(4));
+                if (focused) {
+                    stroke(c, left + i * (pillW + gap) - dp(3), top - dp(3), left + i * (pillW + gap) + pillW + dp(3), top + dp(51), dp(27), 0x55fb5c91, dp(7));
+                    stroke(c, left + i * (pillW + gap), top, left + i * (pillW + gap) + pillW, top + dp(48), dp(24), 0xeaffffff, dp(2));
+                }
                 label(c, searchFilters[i], left + i * (pillW + gap) + pillW / 2f, top + dp(32), dp(17), i == filterIndex ? Color.WHITE : COLOR_TEXT, Paint.Align.CENTER, focused || i == filterIndex);
             }
             if (loading && videos.isEmpty()) {
-                label(c, "正在搜索“" + searchKeyword + "”…", w / 2f, h * .60f, dp(27), 0xff4c686e, Paint.Align.CENTER, true);
+                drawStatePanel(c, w, h, h * .44f, "正在搜索“" + ellipsize(searchKeyword, 14) + "”…", "正在整理当前分类的结果", "", false);
             } else if (videos.isEmpty()) {
                 if (searchKeyword.isEmpty()) {
                     drawSearchSuggest(c, w, h);
                 } else {
                     String empty = status;
                     if (empty.isEmpty()) empty = "当前分类没有找到内容";
-                    label(c, empty, w / 2f, h * .60f, dp(24), 0xff8a3b55, Paint.Align.CENTER, true);
-                    label(c, "按确认键重试", w / 2f, h * .66f, dp(17), 0xffc24469, Paint.Align.CENTER, false);
+                    boolean error = isErrorMessage(empty);
+                    drawStatePanel(c, w, h, h * .44f, empty,
+                            error ? "检查网络后重新搜索" : "试试更短的关键词或切换分类",
+                            error ? "按 OK 重新搜索" : "", error);
                 }
             } else drawSearchResults(c, w, h);
         }
@@ -1452,33 +1704,35 @@ public final class MainActivity extends Activity {
 
             for (int pass = 0; pass < 2; pass++) {
                 for (int i = start; i < end; i++) {
-                    boolean focused = area == AREA_GRID && i == gridIndex;
-                    if ((pass == 0 && focused) || (pass == 1 && !focused)) continue;
+                    boolean current = area == AREA_GRID && i == gridIndex;
+                    if ((pass == 0 && current) || (pass == 1 && !current)) continue;
                     int local = i - start;
                     int row = local / cols;
                     int col = local % cols;
                     float x = left + col * (cardW + gapX);
                     float y = top + row * (cardH + gapY);
-                    float grow = focused ? dp(14) : 0;
+                    float focus = gridFocusAmount(i);
+                    float grow = (posterMode ? dp(14) : peopleMode ? dp(16) : dp(18)) * focus;
                     drawSearchResultCard(c, videos.get(i), x - grow, y - grow,
-                            cardW + grow * 2, imageH + grow * 2, focused, posterMode, peopleMode);
+                            cardW + grow * 2, imageH + grow * 2, focus, posterMode, peopleMode);
                 }
             }
             drawGridFooter(c, w, h);
         }
 
         private void drawSearchResultCard(Canvas c, VideoItem item, float x, float y, float cardW,
-                                          float imageH, boolean focused, boolean posterMode, boolean peopleMode) {
+                                          float imageH, float focus, boolean posterMode, boolean peopleMode) {
+            boolean focused = focus > .02f;
             boolean person = peopleMode || "bili_user".equals(item.kind) || "live_user".equals(item.kind);
             boolean poster = posterMode;
             float footerH = poster ? dp(82) : person ? dp(62) : dp(75);
             rounded(c, x, y, x + cardW, y + imageH + footerH, dp(18), focused ? Color.WHITE : COLOR_CARD);
             stroke(c, x, y, x + cardW, y + imageH + footerH, dp(18), 0x1813212b, dp(1));
             if (focused) {
-                stroke(c, x - dp(5), y - dp(5), x + cardW + dp(5), y + imageH + footerH + dp(5),
-                        dp(23), COLOR_FOCUS, dp(5));
+                stroke(c, x - dp(7), y - dp(7), x + cardW + dp(7), y + imageH + footerH + dp(7),
+                        dp(25), focusColor(COLOR_FOCUS, focus), dp(9));
                 stroke(c, x - dp(1), y - dp(1), x + cardW + dp(1), y + imageH + footerH + dp(1),
-                        dp(19), COLOR_PINK, dp(2));
+                        dp(19), focusColor(COLOR_PINK, focus), dp(2));
             }
 
             Bitmap bitmap = bitmaps.get(item.coverUrl);
@@ -1572,10 +1826,10 @@ public final class MainActivity extends Activity {
                 float chipTop = top + row * (chipH + rowGap);
                 boolean focused = area == AREA_SUGGEST && startIndex + i == suggestIndex;
                 rounded(c, x, chipTop, x + chipW, chipTop + chipH, dp(28),
-                        focused ? COLOR_FOCUS : COLOR_CARD);
-                if (focused) stroke(c, x - dp(3), chipTop - dp(3), x + chipW + dp(3), chipTop + chipH + dp(3), dp(31), COLOR_PINK, dp(3));
+                        focused ? 0xffffe8f0 : COLOR_CARD);
+                if (focused) stroke(c, x - dp(3), chipTop - dp(3), x + chipW + dp(3), chipTop + chipH + dp(3), dp(31), 0x55fb5c91, dp(7));
                 label(c, ellipsize(keywords.get(i), maxChars), x + chipW / 2f, chipTop + dp(35), dp(16),
-                        focused ? Color.WHITE : 0xff2b3a3f, Paint.Align.CENTER, focused);
+                        focused ? 0xffc83e6c : 0xff2b3a3f, Paint.Align.CENTER, focused);
             }
             int rows = Math.max(1, (keywords.size() + columns - 1) / columns);
             return top + rows * (chipH + rowGap);
@@ -1777,6 +2031,8 @@ public final class MainActivity extends Activity {
         }
 
         private void moveHorizontal(int delta) {
+            int oldArea = area;
+            int oldGridIndex = gridIndex;
             if (area == AREA_NAV) {
                 int next = clamp(navIndex + delta, 0, nav.length - 1);
                 if (next != navIndex) {
@@ -1804,6 +2060,7 @@ public final class MainActivity extends Activity {
             } else {
                 if (isPersonalRoot() && delta < 0 && gridIndex % gridColumns() == 0) {
                     area = AREA_SIDEBAR;
+                    finishFocusMove(oldArea, oldGridIndex);
                     invalidate();
                     return;
                 }
@@ -1817,6 +2074,7 @@ public final class MainActivity extends Activity {
                 // 已在最后一项仍按 →：尝试加载下一页（不移动焦点）。
                 if (delta > 0 && !videos.isEmpty() && before >= videos.size() - 1) maybeLoadMore();
             }
+            finishFocusMove(oldArea, oldGridIndex);
             invalidate();
         }
 
@@ -1826,6 +2084,8 @@ public final class MainActivity extends Activity {
                 refreshCurrentPage();
                 return;
             }
+            int oldArea = area;
+            int oldGridIndex = gridIndex;
             int columns = gridColumns();
             if (delta < 0) {
                 if (area == AREA_GRID && gridIndex / columns > 0) { gridIndex = Math.max(0, gridIndex - columns); ensureVisible(); }
@@ -1866,13 +2126,16 @@ public final class MainActivity extends Activity {
                     gridIndex = Math.min(Math.max(0, max), gridIndex + columns); ensureVisible();
                 }
             }
+            finishFocusMove(oldArea, oldGridIndex);
             invalidate();
         }
 
         private void ensureVisible() {
             int row = gridIndex / gridColumns();
             if (row < firstRow) firstRow = row;
-            if (row > firstRow + 1) firstRow = row - 1;
+            // 放大后的焦点卡高度会超出第二可见行；进入下一行时把该行滚到顶部，
+            // 保证完整封面、标题、作者与柔光描边都留在安全区内。
+            if (row > firstRow) firstRow = row;
         }
 
         private void activate() {
@@ -1894,8 +2157,7 @@ public final class MainActivity extends Activity {
             else if (navIndex == 6 && personalMode < 0) {
                 if (isPersonalRoot()) {
                     if (rootSection == 4) {
-                        if (gridIndex == 3) startActivity(new Intent(MainActivity.this, UpdateActivity.class));
-                        else toggleSetting(gridIndex);
+                        activateSetting(gridIndex);
                         return;
                     }
                     if (canRetryEmptyState()) { lastLoadAction.run(); return; }
@@ -1910,7 +2172,7 @@ public final class MainActivity extends Activity {
                 else if (gridIndex == 3) logout();
                 else if (gridIndex == 2) startActivity(new Intent(MainActivity.this, LoginActivity.class));
             }
-            else if (navIndex == 6 && personalMode == 5) toggleSetting(gridIndex);
+            else if (navIndex == 6 && personalMode == 5) activateSetting(gridIndex);
             else if (canRetryEmptyState()) lastLoadAction.run();
             else if (navIndex == 7 && videos.isEmpty()) { area = AREA_SEARCH; invalidate(); }
             else if (!videos.isEmpty() && gridIndex < videos.size()) open(videos.get(gridIndex).targetUrl);
@@ -1993,7 +2255,7 @@ public final class MainActivity extends Activity {
         private boolean hasFilters() { return (navIndex >= 0 && navIndex <= 3) || navIndex == 7; }
 
         private int gridColumns() {
-            if (navIndex == 6 && personalMode < 0) return rootSection == 4 ? 1 : 3;
+            if (navIndex == 6 && personalMode < 0) return rootSection == 4 ? 2 : 3;
             if (navIndex == 6 && (personalMode == 0 || personalMode == 5)) return 2;
             if (navIndex == 7) {
                 if (filterIndex == 2 || filterIndex == 3) return 6;
@@ -2004,9 +2266,9 @@ public final class MainActivity extends Activity {
         }
 
         private int maxGridIndex() {
-            if (navIndex == 6 && personalMode < 0) return isPersonalRoot() ? (rootSection == 4 ? 3 : videos.size() - 1) : 5;
+            if (navIndex == 6 && personalMode < 0) return isPersonalRoot() ? (rootSection == 4 ? 9 : videos.size() - 1) : 5;
             if (navIndex == 6 && personalMode == 0) return BiliAuthRepository.hasSession() ? 3 : 2;
-            if (navIndex == 6 && personalMode == 5) return 2;
+            if (navIndex == 6 && personalMode == 5) return 9;
             return videos.size() - 1;
         }
 
@@ -2023,10 +2285,25 @@ public final class MainActivity extends Activity {
             else { videos.clear(); bitmaps.clear(); loading = false; invalidate(); }
         }
 
-        private void toggleSetting(int index) {
+        private void activateSetting(int index) {
             if (index == 0) settings.setDanmaku(!settings.danmaku());
-            else if (index == 1) settings.setAutoPlay(!settings.autoPlay());
-            else if (index == 2) settings.setHighQuality(!settings.highQuality());
+            else if (index == 1) settings.setDanmakuSize((settings.danmakuSize() + 1) % 3);
+            else if (index == 2) settings.setAutoPlay(!settings.autoPlay());
+            else if (index == 3) settings.setDanmakuOpacity((settings.danmakuOpacity() + 1) % 3);
+            else if (index == 4) settings.setHighQuality(!settings.highQuality());
+            else if (index == 5) settings.setDanmakuSpeed((settings.danmakuSpeed() + 1) % 3);
+            else if (index == 6) {
+                searchHistory.clear();
+                refreshSuggestHistory();
+                Toast.makeText(MainActivity.this, "搜索历史已清除", Toast.LENGTH_SHORT).show();
+            } else if (index == 7) {
+                startActivity(new Intent(MainActivity.this, UpdateActivity.class));
+            } else if (index == 8) {
+                playbackResume.clearAll();
+                Toast.makeText(MainActivity.this, "本地续播进度已清除", Toast.LENGTH_SHORT).show();
+            } else if (index == 9) {
+                Toast.makeText(MainActivity.this, "哔哩客厅 " + BuildConfig.VERSION_NAME + " · Android 手机版声明", Toast.LENGTH_LONG).show();
+            }
             invalidate();
         }
 

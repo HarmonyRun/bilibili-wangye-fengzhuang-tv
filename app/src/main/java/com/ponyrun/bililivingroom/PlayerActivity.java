@@ -67,6 +67,7 @@ public final class PlayerActivity extends Activity {
     private final BiliRepository detailRepository = new BiliRepository();
     private final Handler handler = new Handler();
     private PlaybackResume resumeStore;
+    private PlaybackSettings playbackSettings;
     private boolean resumeSaving;
     private final List<PlaybackRepository.Danmaku> danmaku = new ArrayList<>();
     private SurfaceView surface;
@@ -112,6 +113,9 @@ public final class PlayerActivity extends Activity {
     private boolean autoplayLaunching;
     private int speedIndex = 1;
     private final float[] speeds = {.75f, 1f, 1.25f, 1.5f, 2f};
+    private int danmakuSizeIndex = 1;
+    private int danmakuOpacityIndex = 1;
+    private int danmakuSpeedIndex = 1;
     private long danmakuAnchorPositionMs;
     private long danmakuAnchorRealtimeMs;
     private boolean danmakuAnchorValid;
@@ -288,9 +292,13 @@ public final class PlayerActivity extends Activity {
         pageUrl = getIntent().getStringExtra(EXTRA_URL);
         if (pageUrl == null) pageUrl = "";
         playbackUrl = pageUrl;
+        playbackSettings = new PlaybackSettings(this);
         danmakuEnabled = getIntent().getBooleanExtra(EXTRA_DANMAKU, true);
         autoPlay = getIntent().getBooleanExtra(EXTRA_AUTOPLAY, true);
         highQuality = getIntent().getBooleanExtra(EXTRA_HIGH_QUALITY, true);
+        danmakuSizeIndex = playbackSettings.danmakuSize();
+        danmakuOpacityIndex = playbackSettings.danmakuOpacity();
+        danmakuSpeedIndex = playbackSettings.danmakuSpeed();
         int startQuality = highQuality ? 0 : 64;
         int startPosition = 0;
         if (state != null) {
@@ -1790,12 +1798,12 @@ public final class PlayerActivity extends Activity {
         PlayerOverlay() {
             super(PlayerActivity.this);
             text.setTypeface(android.graphics.Typeface.create("sans", android.graphics.Typeface.NORMAL));
-            actionIcons[0] = getDrawable(android.R.drawable.ic_menu_view);
-            actionIcons[1] = getDrawable(android.R.drawable.ic_media_ff);
-            actionIcons[2] = getDrawable(android.R.drawable.ic_menu_manage);
-            actionIcons[3] = getDrawable(android.R.drawable.ic_menu_sort_by_size);
-            playIcon = getDrawable(android.R.drawable.ic_media_play);
-            pauseIcon = getDrawable(android.R.drawable.ic_media_pause);
+            actionIcons[0] = getDrawable(R.drawable.ic_tv_danmaku);
+            actionIcons[1] = getDrawable(R.drawable.ic_tv_speed);
+            actionIcons[2] = getDrawable(R.drawable.ic_tv_quality);
+            actionIcons[3] = getDrawable(R.drawable.ic_tv_playlist);
+            playIcon = getDrawable(R.drawable.ic_tv_play);
+            pauseIcon = getDrawable(R.drawable.ic_tv_pause);
         }
 
         @Override protected void onDraw(Canvas canvas) {
@@ -2229,9 +2237,11 @@ public final class PlayerActivity extends Activity {
         }
 
         private void drawDanmaku(Canvas canvas, long position) {
-            final long travel = 8000;
+            final long[] travelOptions = {10000, 8000, 6500};
+            final long travel = travelOptions[Math.max(0, Math.min(2, danmakuSpeedIndex))];
             final int lanes = 8;
-            final float laneHeight = dp(64);
+            final float[] laneHeightOptions = {dp(54), dp(64), dp(74)};
+            final float laneHeight = laneHeightOptions[Math.max(0, Math.min(2, danmakuSizeIndex))];
             final float startY = dp(36);
             final float safeLeft = dp(28);
             final float safeRight = getWidth() - dp(28);
@@ -2287,7 +2297,8 @@ public final class PlayerActivity extends Activity {
             if (cached != null) return cached;
             String content = value.length() > 34 ? value.substring(0, 34) + "…" : value;
             Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            bitmapPaint.setTextSize(dp(34));
+            float[] textSizes = {dp(28), dp(34), dp(40)};
+            bitmapPaint.setTextSize(textSizes[Math.max(0, Math.min(2, danmakuSizeIndex))]);
             bitmapPaint.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
             float textWidth = bitmapPaint.measureText(content);
             Paint.FontMetrics metrics = bitmapPaint.getFontMetrics();
@@ -2302,7 +2313,8 @@ public final class PlayerActivity extends Activity {
             bitmapPaint.setColor(0xcc000000);
             bitmapCanvas.drawText(content, pad, baseline, bitmapPaint);
             bitmapPaint.setStyle(Paint.Style.FILL);
-            bitmapPaint.setColor(Color.WHITE);
+            int[] alphas = {153, 204, 255};
+            bitmapPaint.setColor(Color.argb(alphas[Math.max(0, Math.min(2, danmakuOpacityIndex))], 255, 255, 255));
             bitmapCanvas.drawText(content, pad, baseline, bitmapPaint);
             danmakuCache.put(value, bitmap);
             return bitmap;

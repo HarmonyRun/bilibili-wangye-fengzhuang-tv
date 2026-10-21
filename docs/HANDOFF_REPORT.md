@@ -1,9 +1,9 @@
 # 哔哩客厅 Android 项目交接报告
 
-> 交接日期：2026-10-20
-> 当前版本：**1.16.2**（`versionCode 29`）
-> v1.16.1 代码提交：`166bc94`（tag `v1.16.1`）；v1.16.2 为当前工作区，提交后以 `git log -1` 为准
-> 最近稳定 tag：`v1.14.4`；GitHub Release：`v1.16.1`（`HarmonyRun/bilibili-wangye-fengzhuang-tv`）
+> 交接日期：2026-10-21
+> 当前版本：**1.17.2**（`versionCode 33`）
+> v1.17.2 代码提交：`b423ed1`（tag `v1.17.2`）；最新 HEAD 以 `git log -1` 为准
+> 最近稳定 tag：`v1.17.2`；GitHub Release：`v1.17.2`（`HarmonyRun/bilibili-wangye-fengzhuang-tv`）
 > 应用 ID：`com.ponyrun.bililivingroom`
 > 项目路径：`/Users/ponyrun/Documents/AndroidApp/ilibilib`
 
@@ -21,26 +21,26 @@
 
 | 交付物 | 位置 | 状态 |
 | --- | --- | --- |
-| 可安装 Debug APK | `../BiliLivingRoom-debug.apk` | `1.16.2 (29)` |
+| 可安装 Debug APK | `../BiliLivingRoom-debug.apk` | `1.17.2 (33)` |
 | Gradle 输出 APK | `../app/build/outputs/apk/debug/app-debug.apk` | `assembleDebug` 生成 |
-| 源代码 | `../app/src/main/java/com/ponyrun/bililivingroom/` | Java 8，约 9,970 行 |
-| 需求/版本记录 | `CHANGELOG.md` | v1.4.0 → v1.16.2 |
+| 源代码 | `../app/src/main/java/com/ponyrun/bililivingroom/` | Java 8，约 10,065 行 |
+| 需求/版本记录 | `CHANGELOG.md` | v1.4.0 → v1.17.2 |
 | 历史基线评审 | `PROJECT_STATUS_AND_ROADMAP.md` | v1.4.0 基线评审 + 后续路线（顶部已标注为历史快照；当前状态以本报告为准） |
 | 设计与实现 QA | `../design-qa.md` | 视觉、交互、验收记录 |
-| 截图证据 | `../qa/` | 按版本归档，v1.5 → v1.16.2 |
+| 截图证据 | `../qa/` | 按版本归档，v1.5 → v1.17.2 |
 | 开源说明 | `../NOTICE.md`、`../LICENSE.md` | GPL v2 与上游归属 |
 
 当前 APK SHA-256（每次重新构建后以 `shasum -a 256 BiliLivingRoom-debug.apk` 为准）：
 
 ```text
-800cf5f7e86c331dc75d0d40b723e2ad66f2bd2c7cc44bd78cf6eb3f3246d955
+fa8dab627757d363c569e0c48046be994fb1cd1374ed47441bb4f99b8bc02949
 ```
 
 当前构建状态：
 
 - `./gradlew clean assembleDebug lintDebug` → **BUILD SUCCESSFUL**
-- Lint：**0 errors / 36 warnings**（固定横屏、DiscouragedApi、WebView JavaScript、依赖版本提示等）
-- v1.16.1 已实现连续播放与 GitHub OTA；代码已提交并打 tag，Release v1.16.1 已发布
+- Lint：**0 errors / 37 warnings**（固定横屏、DiscouragedApi、WebView JavaScript、依赖版本提示等）
+- v1.17.2 已提交并打 tag；GitHub Release 同步发布
 - 测试模拟器内保留了真实账号登录态；**开发收尾时再统一退出/清除 Cookie**，不要把二维码、Cookie 或账号信息提交到仓库
 
 ---
@@ -109,7 +109,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 `直播`、`推荐`、`热门`、`排行榜`、`动态`、`收藏`、`我的`、`搜索`
 
 - 顶部导航**焦点即切换页面**，无需按确认键。
-- 内容区为 4 列 TV 大卡片；卡片有封面、时长、播放量、标题、UP 名；支持分页加载、错误重试、空态、顶部 `↑` 刷新。
+- 常规内容区为 3 列 TV 大卡片；搜索按内容类型使用 4 列横版、6 列海报或 3 列用户卡；卡片有封面、时长、播放量、标题、UP 名，并支持分页加载、错误重试、空态和顶部 `↑` 刷新。
 - 列表接口统一使用 B 站 Web API；图片通过 `BiliRepository` 异步加载并缓存。
 
 二级分类栏（有分类栏的页面）：
@@ -177,7 +177,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 
 - 加载 `comment.bilibili.com/<cid>.xml`，支持 raw deflate / gzip 解码；
 - 默认开启，可在播放器上区关闭/开启；
-- 字号 `dp(34)`、8 条通道、描边增强、阴影位图预渲染；
+- 字号可在小/中/大三档间选择，透明度可选 60%/80%/100%，速度可选慢/标准/快；8 条通道、描边增强、阴影位图预渲染；
 - 移动使用 SystemClock 单调时钟外推，正常播放不逐帧修正锚点，带单调保护避免左右回退；
 - 目标 60fps（`postInvalidateOnAnimation`）；弹幕文字位图 LRU 缓存（8MB 上限）；
 - 加载/seek/切 P/切集后只让新弹幕从右侧边缘进入，跳过更早的旧弹幕。
@@ -197,8 +197,8 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
   - 收藏与订阅；
   - 稍后再看；
   - 我的追番；
-  - 设置（按「播放体验 / 画质偏好」分组的默认弹幕/自动播放/优先高清）；
-  - 检测更新（GitHub Release OTA，见 4.9）；
+  - 设置（双栏「播放 / 弹幕 / 账户与数据 / 关于」分组，含默认弹幕、自动播放、优先高清、字号、透明度、速度、清除本地数据和应用信息）；
+  - 检测更新（位于设置「关于」分组，GitHub Release OTA，见 4.9）；
   - 退出登录（动作，不跳页）；
 - 四类内容卡具有独立状态表达：历史观看进度条、收藏「收藏」、稍后再看「待看」、追番「追番」；列表默认等大，仅当前遥控器焦点放大；
 - 空内容或加载失败时显示居中说明面板，按 OK 可重新加载；
@@ -226,7 +226,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 
 ### 4.9 OTA 更新
 
-- 设置第 4 行「检测更新」→ `UpdateActivity`。
+- 设置右栏「关于 / 检测更新」→ `UpdateActivity`。
 - `UpdateManager` 请求 `https://api.github.com/repos/HarmonyRun/bilibili-wangye-fengzhuang-tv/releases/latest`，比较 tag 版本与 `BuildConfig.VERSION_NAME`。
 - 有新版本时显示版本号/更新说明/APK 大小；下载到 `cache/updates`，通过 `FileProvider` + `ACTION_VIEW` 拉起系统安装器；API 26+ 需允许“安装未知应用”。
 - 当前 Release：`v1.16.1`，APK 使用本机 Debug 签名；正式发布需固定 release keystore，否则已安装应用无法覆盖升级。
@@ -321,7 +321,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 
 ## 8. 版本与 Git 索引
 
-最近稳定 tag：`v1.14.4`；v1.15.0 视觉升级尚未要求提交/tag。
+最近稳定 tag：`v1.16.2`；当前 v1.16.3 视觉一致性更新尚未要求提交/tag。
 
 最近版本：
 
@@ -345,6 +345,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 | v1.15.0 | Pearl Glass Gallery 全局视觉升级 |
 | v1.16.1 | 连续播放 + GitHub OTA 更新 |
 | v1.16.2 | 竖屏视频比例修复 |
+| v1.16.3 | Material Round 图标统一 + 更新页焦点视觉 |
 
 完整逐版本说明见 `CHANGELOG.md`；版本迭代细节、剩余路线见 `PROJECT_STATUS_AND_ROADMAP.md`。
 
@@ -354,8 +355,8 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 
 ### 9.1 已执行的工程验证
 
-- `clean assembleDebug lintDebug`：**成功，0 errors / 36 warnings**；
-- APK 可安装到 `bili_tv` AVD；
+- `clean assembleDebug lintDebug`：**成功，0 errors / 37 warnings**；
+- APK 可安装到 `bili_tv_qa` AVD；
 - 模拟器真实账号登录态下完成主要流程验收（见下）。
 
 ### 9.2 已在模拟器验证的关键路径
@@ -374,6 +375,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 - 普通视频结束自动进入推荐视频；多P/番剧按顺序下一P/下一集；
 - GitHub Release v1.16.1 检测、下载、FileProvider 安装器拉起，1.16.0 → 1.16.1 更新成功；
 - 竖屏 BV13EnG63E4Z 比例正确、横屏 BV186Jq6uEFu 全屏无回归。
+- v1.16.3 复核“我的”侧栏、视频详情操作区、播放器横向功能栏和更新页；统一矢量图标后焦点顺序、按钮尺寸和下级菜单入口无回归。
 
 ### 9.3 未做运行时验收/需下一阶段补测
 
@@ -385,8 +387,8 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 
 ### 9.4 证据位置
 
-- 最新版本：`../qa/v1.16.2/`
-- 历史版本：`../qa/v1.5/` … `../qa/v1.16.1/`
+- 最新版本：`../qa/v1.17.2/`
+- 历史版本：`../qa/v1.5/` … `../qa/v1.17.1/`
 - 早期截图：`../qa/implementation-*.png`
 - 视觉/交互验收：`../design-qa.md`
 
@@ -412,8 +414,8 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 
 ### P2：体验与数据
 
-- 弹幕通道仍按索引分配，没有严格车道碰撞避让；密集弹幕会重叠。
-- “我的”历史卡片没有发布日期字段；相关推荐卡片没有弹幕数。
+- 弹幕采用位置排序与八车道避碰，但尚未做 TV 真机长时间压力测试；极端高密度弹幕仍可能受性能影响。
+- 相关推荐卡片没有弹幕数。
 - “我的”侧栏未放“账号中心”入口；无二级导航的收藏/动态/我的页没有分类栏。
 - 二级导航焦点即加载会连续请求，快速扫过时请求略多；可考虑 200ms 防抖。
 - 本地续播只保存在本机，不跨设备；自动连播会读取下一集/下一 P 的已存进度。
@@ -453,7 +455,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 
 ### P2（体验/工程）
 
-1. 弹幕车道碰撞、性能模式、真机 60fps；
+1. 弹幕高密度压力测试、性能模式、真机 60fps；
 2. 触屏/手机适配、后台播放；
 3. 拆分 `MainActivity`/`PlayerActivity` 的绘制与状态机，补测试；
 4. 收藏/动态/我的二级分类与更多账号内容。
@@ -469,7 +471,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 - [ ] 走通：播放器 ↑/↓ 三区、清晰度/倍速/选集、进度续播。
 - [ ] 走通：搜索热搜/历史/输入、我的页各功能区、UP 主页、动态详情。
 - [ ] 检查 logcat `FATAL EXCEPTION`、`ExoPlaybackException`、`BiliProgress`。
-- [ ] 验收 v1.16.1 后确认 Git 工作区并按需提交/tag。
+- [ ] 验收 v1.17.2 后确认 Git 工作区并按需提交/tag。
 - [ ] 若要继续开发，先建分支；不要提交二维码截图、Cookie、`local.properties`、`app/build/`。
 
 ---
@@ -502,7 +504,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
    ```
 
 4. **版本纪律**：每次交付更新 `CHANGELOG.md` / 本报告 / QA 截图，构建通过后 commit + tag。
-5. **当前状态**：v1.15.0 已完成 Pearl Glass Gallery 视觉升级并可继续开发；发布级质量仍需完成第 11 节清单。
+5. **当前状态**：v1.17.2 已完成动态焦点画廊、收藏页资料侧栏与主要页面效果图回归；发布级质量仍需完成第 11 节清单。
 
 ---
 
@@ -523,6 +525,57 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 - 修复：`Player.onVideoSizeChanged` 计算 `width/height/旋转/像素宽高比`，SurfaceView 按比例居中；竖屏左右黑边，横屏全屏；overlay/弹幕/控制层保持全屏。
 - 验证：竖屏 BV13EnG63E4Z（1080×1920）比例正确；横屏 BV186Jq6uEFu 全屏无回归。证据 `qa/v1.16.2/`。
 - 版本：`1.16.2 (29)`，APK SHA-256 `800cf5f7e86c331dc75d0d40b723e2ad66f2bd2c7cc44bd78cf6eb3f3246d955`。
+
+---
+
+## 18. v1.16.3 图标与焦点一致性收尾（2026-10-21）
+
+- 图标：播放器、视频详情、“我的”侧栏与内容徽标统一为 Material Round 矢量资源，不再依赖样式不一致的旧版 Android 系统图标。
+- 更新页：增加更新状态图标，按钮补白色焦点描边、粉色按压态和非全大写文本。
+- 遥控器回归：顶部焦点即切换、“我的”侧栏 → 内容网格、详情播放、播放器 ↑ 呼出功能栏、左右切换功能按钮及 OK 进入下级菜单均通过 1920×1080 AVD 验证。
+- 视觉证据：`qa/v1.16.3/my-icons-unified.png`、`detail-icons-unified.png`、`player-icons-unified.png`、`settings-icons-unified.png`、`update-page-unified.png`。
+- 构建：`clean assembleDebug lintDebug` 成功，Lint 0 errors / 37 warnings。
+- 版本：`1.16.3 (30)`，APK SHA-256 `060fafa6cde907a6e46d596260d26a2ed655a571217f2c8c7d03c49ac3eab4c7`。
+- Git：本轮未提交、未打 tag；用户验收后再决定是否提交/tag/发布。
+
+---
+
+## 19. v1.17.0 顶部导航与双栏设置（2026-10-21）
+
+- 顶部导航：去除焦点态黑色外圈，改为品牌粉柔光与细白内描边；选中项保持品牌粉胶囊，视觉与 `design/concepts/11-settings.png` 对齐。
+- 设置：右侧内容区改为两栏四分组（播放 / 弹幕 / 账户与数据 / 关于），十个项目按遥控器行列顺序排列；当前焦点使用白底、细深色内线与粉色柔光。
+- 弹幕：新增字号、透明度和移动速度三档持久设置；`PlayerActivity` 按设置调整位图字号/Alpha、车道高度和横向运动时长。
+- 数据动作：新增清除搜索历史、清除本地续播进度与应用信息入口；检测更新移动到“关于”分组。
+- 遥控器验证：双栏左右切换、逐行上下移动、三个弹幕值循环切换、详情页进入播放器均已在 1920×1080 AVD 实测。
+- 视觉证据：`qa/v1.17.0/nav-focus-pink-final.png`、`settings-two-column-final.png`、`settings-danmaku-values.png`、`compare-settings-final.png`。
+- 构建：`clean assembleDebug lintDebug` 成功，Lint 0 errors / 38 warnings。
+- 版本：`1.17.0 (31)`，APK SHA-256 `7f3e67ae63da37c1497f5a1faf0366acc9712c890645d1c99177cf0aebc80cf6`；本轮未提交、未打 tag。
+
+---
+
+## 20. v1.17.1 全局状态卡与浅色焦点收尾（2026-10-21）
+
+- 状态系统：首页/分类/搜索、UP 主页、动态详情、视频详情统一加载、空内容和错误卡片；加载/无效参数不伪装成可重试状态，真正错误才允许按 OK 重试。
+- 内容显示：动态详情加载时隐藏空白正文；视频详情成功前隐藏封面和操作按钮，已用真实视频回归成功态。
+- 焦点视觉：“我的”侧栏、搜索词/分类与 UP 投稿卡去除黑色填充，统一浅粉底、品牌粉文字与柔光描边。
+- 验收：1920×1080 AVD 截图与效果图对照，证据见 `qa/v1.17.1/`；三类详情空态并排见 `state-cards-consistency.png`。
+- 构建：`clean assembleDebug lintDebug` 成功，Lint 0 errors / 38 warnings；APK 已安装到 AVD 验证。
+- 包声明：`1.17.1 (32)`，仅 `android.intent.category.LAUNCHER`，无 Leanback launcher，触摸屏为非必需。
+- APK SHA-256：`9c36c4d64ca1234e146c69825c2e03bba8c63a08704155f854c6483366a9c921`；本轮未提交、未打 tag。
+
+---
+
+## 21. v1.17.2 动态卡片画廊与收藏页（2026-10-21）
+
+- 焦点动画：首页、直播、推荐、热门、排行、动态、收藏、搜索和“我的”内容卡统一为 170ms 缓动；移动焦点时新卡扩展、旧卡同步恢复，不再让第一张封面永久变大。
+- 三列重排：首页及动态/收藏三列画廊按当前焦点动态分配宽度，焦点卡形成宽幅主视觉，其余两张保持正常比例；长标题按卡片实际宽度截断。
+- 焦点视觉：移除内容卡深色粗圈，改为品牌粉柔光与细描边；上下换行时将新焦点行滚动到安全位置，避免放大卡片被屏幕底部裁切。
+- 收藏页：使用真实账号头像、昵称、等级、硬币、关注/粉丝及默认收藏夹数量构建左侧资料面板，右侧显示真实收藏视频；未接入的收藏夹分类不做伪数据。
+- 视觉验收：1920×1080 AVD 覆盖首页第一/第二卡及下一行、动态第一/第二卡、收藏第一/第二卡、搜索结果和“我的”内容区。源效果图与实现并排证据见 `qa/v1.17.2/compare-*-final.png`。
+- 包声明：`1.17.2 (33)`，仍为普通手机 Launcher 声明，无 Leanback launcher，触摸屏标记为非必需。
+- 构建：`clean assembleDebug lintDebug` 成功，Lint 0 errors / 38 warnings；APK 已重新复制到项目根目录。
+- APK SHA-256：`fa8dab627757d363c569e0c48046be994fb1cd1374ed47441bb4f99b8bc02949`。
+- Git：本轮未提交、未打 tag；用户验收后再决定是否提交/tag/发布。
 
 ---
 

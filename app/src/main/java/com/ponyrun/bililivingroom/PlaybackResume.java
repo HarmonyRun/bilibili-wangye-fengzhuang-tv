@@ -35,6 +35,10 @@ final class PlaybackResume {
         preferences.edit().remove(key).apply();
     }
 
+    void clearAll() {
+        preferences.edit().clear().apply();
+    }
+
     static String epKey(long epId) {
         return KEY_PREFIX_EP + epId;
     }

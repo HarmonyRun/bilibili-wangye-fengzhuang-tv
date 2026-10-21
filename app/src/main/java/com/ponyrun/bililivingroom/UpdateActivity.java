@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
@@ -14,6 +15,7 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -55,6 +57,7 @@ public final class UpdateActivity extends Activity {
     private void buildUi() {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+        scroll.setFocusable(false);
         scroll.setBackgroundResource(R.drawable.app_window_background);
 
         LinearLayout content = new LinearLayout(this);
@@ -78,8 +81,18 @@ public final class UpdateActivity extends Activity {
         card.setPadding((int) dp(38), (int) dp(30), (int) dp(38), (int) dp(30));
         content.addView(card, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        LinearLayout statusRow = new LinearLayout(this);
+        statusRow.setOrientation(LinearLayout.HORIZONTAL);
+        statusRow.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView updateIcon = new ImageView(this);
+        updateIcon.setImageResource(R.drawable.ic_tv_update);
+        updateIcon.setColorFilter(0xfffb5c91);
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams((int) dp(46), (int) dp(46));
+        iconParams.rightMargin = (int) dp(18);
+        statusRow.addView(updateIcon, iconParams);
         statusView = text("正在检查更新…", 27, 0xff13212b, true);
-        card.addView(statusView);
+        statusRow.addView(statusView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        card.addView(statusRow, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         versionView = text("", 20, 0xff3f525d, false);
         versionView.setPadding(0, (int) dp(12), 0, (int) dp(4));
         card.addView(versionView);
@@ -108,11 +121,13 @@ public final class UpdateActivity extends Activity {
         actionButton = new Button(this);
         actionButton.setText("检查中…");
         actionButton.setFocusable(true);
+        actionButton.setFocusableInTouchMode(true);
+        actionButton.setAllCaps(false);
+        actionButton.setGravity(Gravity.CENTER);
         actionButton.setTextColor(Color.WHITE);
         actionButton.setTextSize(TypedValue.COMPLEX_UNIT_PX, dp(22));
-        actionButton.setBackgroundTintList(new ColorStateList(
-                new int[][]{new int[]{android.R.attr.state_focused}, new int[]{}},
-                new int[]{0xffe94f86, 0xfffb5c91}));
+        actionButton.setBackgroundTintList(null);
+        actionButton.setBackground(actionButtonBackground());
         LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams((int) dp(320), (int) dp(72));
         actionParams.topMargin = (int) dp(28);
         content.addView(actionButton, actionParams);
@@ -283,6 +298,26 @@ public final class UpdateActivity extends Activity {
         view.setTextSize(TypedValue.COMPLEX_UNIT_PX, dp(size));
         if (bold) view.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         return view;
+    }
+
+    private StateListDrawable actionButtonBackground() {
+        StateListDrawable states = new StateListDrawable();
+        GradientDrawable focused = new GradientDrawable();
+        focused.setColor(0xffe94f86);
+        focused.setCornerRadius(dp(18));
+        focused.setStroke((int) dp(4), Color.WHITE);
+        GradientDrawable pressed = new GradientDrawable();
+        pressed.setColor(0xffd94479);
+        pressed.setCornerRadius(dp(18));
+        pressed.setStroke((int) dp(2), 0xffffbfd2);
+        GradientDrawable normal = new GradientDrawable();
+        normal.setColor(0xfffb5c91);
+        normal.setCornerRadius(dp(18));
+        normal.setStroke((int) dp(1), 0xffffa8c3);
+        states.addState(new int[]{android.R.attr.state_pressed}, pressed);
+        states.addState(new int[]{android.R.attr.state_focused}, focused);
+        states.addState(new int[]{}, normal);
+        return states;
     }
 
     private float dp(float value) {

@@ -142,9 +142,11 @@ public final class UserSpaceActivity extends Activity {
 
         statusView = text("正在加载 UP 主主页…", 20, 0xff60717c, false);
         statusView.setGravity(Gravity.CENTER);
-        statusView.setPadding(0, (int) dp(36), 0, (int) dp(36));
-        statusView.setFocusable(true);
-        content.addView(statusView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        statusView.setPadding((int) dp(36), (int) dp(32), (int) dp(36), (int) dp(32));
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(210));
+        statusParams.setMargins((int) dp(300), (int) dp(16), (int) dp(300), (int) dp(18));
+        content.addView(statusView, statusParams);
+        setStatusState("正在加载投稿视频…", "请稍候，正在获取 UP 主内容", false, false);
 
         gridContainer = new LinearLayout(this);
         gridContainer.setOrientation(LinearLayout.VERTICAL);
@@ -208,8 +210,7 @@ public final class UserSpaceActivity extends Activity {
         if (destroyed || loadingMore || mid <= 0) return;
         loadingMore = true;
         if (page == 1) {
-            statusView.setText("正在加载投稿视频…");
-            statusView.setVisibility(View.VISIBLE);
+            setStatusState("正在加载投稿视频…", "请稍候，正在获取 UP 主内容", false, false);
             gridContainer.removeAllViews();
             cards.clear();
             currentRow = null;
@@ -225,9 +226,7 @@ public final class UserSpaceActivity extends Activity {
             loadingMore = false;
             if (error != null && !error.isEmpty()) {
                 if (requestedPage == 1) {
-                    statusView.setText(error + "\n按 OK 重试");
-                    statusView.setVisibility(View.VISIBLE);
-                    statusView.requestFocus();
+                    setStatusState(error, "检查网络后按 OK 重新加载", true, true);
                 } else {
                     loadMoreView.setText("加载失败，按 ↓/→ 重试");
                 }
@@ -240,8 +239,7 @@ public final class UserSpaceActivity extends Activity {
                 currentRowCount = 0;
                 lastCard = null;
                 if (items == null || items.isEmpty()) {
-                    statusView.setText("这里还没有投稿视频");
-                    statusView.setVisibility(View.VISIBLE);
+                    setStatusState("这里还没有投稿视频", "UP 主发布内容后会显示在这里", false, false);
                     hasMore = false;
                     this.page = 1;
                     loadMoreView.setText("");
@@ -296,14 +294,14 @@ public final class UserSpaceActivity extends Activity {
         card.addView(cover, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(300)));
 
         TextView title = text(item.title, 18, 0xff13212b, true);
-        title.setTextColor(focusTextColor(0xff13212b, Color.WHITE));
+        title.setTextColor(focusTextColor(0xff13212b, 0xff13212b));
         title.setMaxLines(2);
         title.setEllipsize(TextUtils.TruncateAt.END);
         title.setPadding(0, (int) dp(10), 0, (int) dp(4));
         card.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView meta = text(item.stats + "   " + item.duration, 14, 0xff60717c, false);
-        meta.setTextColor(focusTextColor(0xff60717c, 0xffdbe3e8));
+        meta.setTextColor(focusTextColor(0xff60717c, 0xff60717c));
         card.addView(meta, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         card.setOnClickListener(v -> openVideoDetail(item.targetUrl));
@@ -351,8 +349,18 @@ public final class UserSpaceActivity extends Activity {
     }
 
     private void showStatus(String message) {
-        statusView.setText(message);
+        setStatusState(message, "请返回上一页后重新进入", false, true);
+    }
+
+    private void setStatusState(String title, String hint, boolean actionable, boolean error) {
+        statusView.setText(title + (hint == null || hint.isEmpty() ? "" : "\n" + hint));
+        statusView.setTextColor(error ? 0xff8a3b55 : 0xff52656d);
+        statusView.setLineSpacing(dp(12), 1f);
+        statusView.setFocusable(actionable);
+        statusView.setClickable(actionable);
+        statusView.setBackground(statusBackground(actionable));
         statusView.setVisibility(View.VISIBLE);
+        if (actionable) statusView.requestFocus();
     }
 
     @Override protected void onDestroy() {
@@ -373,13 +381,22 @@ public final class UserSpaceActivity extends Activity {
     private StateListDrawable cardBackground() {
         StateListDrawable drawable = new StateListDrawable();
         GradientDrawable focused = new GradientDrawable();
-        focused.setColor(0xff16202a);
+        focused.setColor(0xffffffff);
         focused.setCornerRadius(dp(18));
-        focused.setStroke((int) dp(4), 0xfffb5c91);
+        focused.setStroke((int) dp(6), 0x88fb5c91);
         GradientDrawable normal = new GradientDrawable();
         normal.setColor(0xedffffff);
         normal.setCornerRadius(dp(18));
         normal.setStroke((int) dp(1), 0x1813212b);
+        drawable.addState(new int[]{android.R.attr.state_focused}, focused);
+        drawable.addState(new int[]{}, normal);
+        return drawable;
+    }
+
+    private StateListDrawable statusBackground(boolean actionable) {
+        StateListDrawable drawable = new StateListDrawable();
+        GradientDrawable focused = surface(0xffffffff, 26, 0xfffb5c91, 5);
+        GradientDrawable normal = surface(0xeaffffff, 26, actionable ? 0x55fb5c91 : 0x1813212b, actionable ? 2 : 1);
         drawable.addState(new int[]{android.R.attr.state_focused}, focused);
         drawable.addState(new int[]{}, normal);
         return drawable;

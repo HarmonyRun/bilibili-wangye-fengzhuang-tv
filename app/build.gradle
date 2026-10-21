@@ -10,8 +10,8 @@ android {
         applicationId 'com.ponyrun.bililivingroom'
         minSdk 23
         targetSdk 35
-        versionCode 29
-        versionName '1.16.2'
+        versionCode 33
+        versionName '1.17.2'
     }
 
     compileOptions {
