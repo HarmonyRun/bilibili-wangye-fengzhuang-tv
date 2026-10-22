@@ -1,9 +1,9 @@
 # 哔哩客厅 Android 项目交接报告
 
-> 交接日期：2026-10-21
-> 当前版本：**1.17.2**（`versionCode 33`）
-> v1.17.2 代码提交：`b423ed1`（tag `v1.17.2`）；最新 HEAD 以 `git log -1` 为准
-> 最近稳定 tag：`v1.17.2`；GitHub Release：`v1.17.2`（`HarmonyRun/bilibili-wangye-fengzhuang-tv`）
+> 交接日期：2026-10-22
+> 当前版本：**1.18.1**（`versionCode 35`）
+> v1.18.1 代码提交：`b8d4a09`（tag `v1.18.1`）；最新 HEAD 以 `git log -1` 为准
+> 最近稳定 tag：`v1.18.1`；GitHub Release：`v1.18.1`（`HarmonyRun/bilibili-wangye-fengzhuang-tv`）
 > 应用 ID：`com.ponyrun.bililivingroom`
 > 项目路径：`/Users/ponyrun/Documents/AndroidApp/ilibilib`
 
@@ -21,26 +21,26 @@
 
 | 交付物 | 位置 | 状态 |
 | --- | --- | --- |
-| 可安装 Debug APK | `../BiliLivingRoom-debug.apk` | `1.17.2 (33)` |
+| 可安装 Debug APK | `../BiliLivingRoom-debug.apk` | `1.18.1 (35)` |
 | Gradle 输出 APK | `../app/build/outputs/apk/debug/app-debug.apk` | `assembleDebug` 生成 |
 | 源代码 | `../app/src/main/java/com/ponyrun/bililivingroom/` | Java 8，约 10,065 行 |
-| 需求/版本记录 | `CHANGELOG.md` | v1.4.0 → v1.17.2 |
+| 需求/版本记录 | `CHANGELOG.md` | v1.4.0 → v1.18.1 |
 | 历史基线评审 | `PROJECT_STATUS_AND_ROADMAP.md` | v1.4.0 基线评审 + 后续路线（顶部已标注为历史快照；当前状态以本报告为准） |
 | 设计与实现 QA | `../design-qa.md` | 视觉、交互、验收记录 |
-| 截图证据 | `../qa/` | 按版本归档，v1.5 → v1.17.2 |
+| 截图证据 | `../qa/` | 按版本归档，v1.5 → v1.18.1 |
 | 开源说明 | `../NOTICE.md`、`../LICENSE.md` | GPL v2 与上游归属 |
 
 当前 APK SHA-256（每次重新构建后以 `shasum -a 256 BiliLivingRoom-debug.apk` 为准）：
 
 ```text
-fa8dab627757d363c569e0c48046be994fb1cd1374ed47441bb4f99b8bc02949
+9505e06c10cc8e3705844998479b97e6a896d01d9cb799b53e8426edd2f269c3
 ```
 
 当前构建状态：
 
 - `./gradlew clean assembleDebug lintDebug` → **BUILD SUCCESSFUL**
 - Lint：**0 errors / 37 warnings**（固定横屏、DiscouragedApi、WebView JavaScript、依赖版本提示等）
-- v1.17.2 已提交并打 tag；GitHub Release 同步发布
+- v1.17.2 已提交并打 tag、GitHub Release 已发布；v1.18.0–v1.18.1 当前仅在本地工作区
 - 测试模拟器内保留了真实账号登录态；**开发收尾时再统一退出/清除 Cookie**，不要把二维码、Cookie 或账号信息提交到仓库
 
 ---
@@ -387,8 +387,9 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 
 ### 9.4 证据位置
 
-- 最新版本：`../qa/v1.17.2/`
-- 历史版本：`../qa/v1.5/` … `../qa/v1.17.1/`
+- 最新版本：`../qa/v1.18.1/`
+- 公开精选截图：`../screenshots/`（首页/搜索/详情/播放器/动态/设置）
+- 历史版本：`../qa/v1.5/` … `../qa/v1.18.0/`
 - 早期截图：`../qa/implementation-*.png`
 - 视觉/交互验收：`../design-qa.md`
 
@@ -471,7 +472,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 - [ ] 走通：播放器 ↑/↓ 三区、清晰度/倍速/选集、进度续播。
 - [ ] 走通：搜索热搜/历史/输入、我的页各功能区、UP 主页、动态详情。
 - [ ] 检查 logcat `FATAL EXCEPTION`、`ExoPlaybackException`、`BiliProgress`。
-- [ ] 验收 v1.17.2 后确认 Git 工作区并按需提交/tag。
+- [ ] 验收 v1.18.1 后确认 Git 工作区并按需提交/tag。
 - [ ] 若要继续开发，先建分支；不要提交二维码截图、Cookie、`local.properties`、`app/build/`。
 
 ---
@@ -504,7 +505,7 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
    ```
 
 4. **版本纪律**：每次交付更新 `CHANGELOG.md` / 本报告 / QA 截图，构建通过后 commit + tag。
-5. **当前状态**：v1.17.2 已完成动态焦点画廊、收藏页资料侧栏与主要页面效果图回归；发布级质量仍需完成第 11 节清单。
+5. **当前状态**：v1.18.1 已完成真实收藏夹目录切换与排序筛选、搜索全部及用户/主播分类、“我的”头像优先加载和动态多类型回归；发布级质量仍需完成第 11 节清单。
 
 ---
 
@@ -575,6 +576,35 @@ adb shell am start -n com.ponyrun.bililivingroom/.MainActivity
 - 包声明：`1.17.2 (33)`，仍为普通手机 Launcher 声明，无 Leanback launcher，触摸屏标记为非必需。
 - 构建：`clean assembleDebug lintDebug` 成功，Lint 0 errors / 38 warnings；APK 已重新复制到项目根目录。
 - APK SHA-256：`fa8dab627757d363c569e0c48046be994fb1cd1374ed47441bb4f99b8bc02949`。
+- Git：本轮未提交、未打 tag；用户验收后再决定是否提交/tag/发布。
+
+---
+
+## 22. v1.18.0 收藏夹目录与搜索分组（2026-10-21）
+
+- 收藏目录：`BiliRepository` 新增真实收藏夹目录模型与接口，页面显示名称、服务端视频数，并按选中 `media_id` 分页读取视频。
+- 遥控器：收藏页新增独立目录焦点区；从顶部向下进入目录，上下移动即切换内容，向右进入视频画廊，画廊首列向左返回目录。
+- 搜索：全部结果按三张横版视频 + 一张番剧/影视海报 + 第二组紧凑卡构图；结果重新排序只作用于首屏展示，不改变真实目标地址或分类页数据。
+- “我的”：四类内容画廊采用与首页一致的权重重排和 170ms 焦点动画。
+- 证据：`qa/v1.18.0/favorites-folder-switched.png`、`search-all-grouped.png`、`my-weighted-second.png` 及三张同尺寸并排对照图。
+- 包声明：`1.18.0 (34)`，继续使用普通手机 Launcher，无 Leanback launcher，触摸屏非必需。
+- 构建：`clean assembleDebug lintDebug` 成功，Lint 0 errors / 38 warnings；APK 已覆盖安装并完成冷启动与崩溃日志检查。
+- APK SHA-256：`bc6acf59bd533a3b9d3315ab7139c7c152acaa808369f68f2d010f034d998b2a`。
+- Git：本轮未提交、未打 tag；用户验收后再决定是否提交/tag/发布。
+
+---
+
+## 23. v1.18.1 收藏筛选、搜索资料卡与账号头像（2026-10-22）
+
+- 收藏控制：右上增加排序和内容筛选两个遥控器控件；左右选择控件，OK 在“最近收藏 / 最多播放”和“全部内容 / 可播放视频”之间切换，并重新加载当前收藏夹。
+- 收藏侧栏：目录超过四项时随焦点滚动，标题显示当前位置/总数；“当前视图”会同步显示真实排序与筛选状态。空目录和接口错误使用独立提示，错误支持 OK 重试。
+- 账号图片：头像与空间头图走独立单线程高优先级图片队列，避免被历史/收藏视频封面队列阻塞；头像不可用时显示品牌粉文字头像，不再出现近黑占位圆。
+- 搜索：用户页显示头像、签名、粉丝和投稿数；主播页显示开播状态；直播间保持横版 LIVE 卡。真实关键词 `onepiece` 完成“全部 / 用户 / 主播 / 直播间空态”回归。
+- 动态：真实登录流覆盖视频、图文和转发卡；头像横栏、类型徽标、发布时间与三列焦点重排均通过 1080p 截图检查。
+- 视觉证据：`qa/v1.18.1/favorites-playable.png`、`my-avatar.png`、`search-all.png`、`search-users.png`、`search-live-users.png`、`search-live-rooms.png`、`dynamic-types.png`；同尺寸设计对照为 `compare-*.png`。
+- 包声明：`1.18.1 (35)`，继续使用普通手机 Launcher，无 Leanback launcher，触摸屏非必需。
+- 构建：`clean assembleDebug lintDebug` 成功，Lint 0 errors / 37 warnings；最终 APK 已覆盖安装并完成冷启动与崩溃日志检查。
+- APK SHA-256：`9505e06c10cc8e3705844998479b97e6a896d01d9cb799b53e8426edd2f269c3`。
 - Git：本轮未提交、未打 tag；用户验收后再决定是否提交/tag/发布。
 
 ---

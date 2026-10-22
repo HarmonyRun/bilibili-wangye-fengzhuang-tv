@@ -226,6 +226,22 @@ final class BiliRepository {
 
     interface AccountProfileCallback { void onResult(AccountProfile profile, String error); }
 
+    /** 账号创建的收藏夹目录；用于收藏页左栏真实导航。 */
+    static final class FavoriteFolder {
+        final long id;
+        final String title;
+        final int mediaCount;
+        final String cover;
+        FavoriteFolder(long id, String title, int mediaCount, String cover) {
+            this.id = id;
+            this.title = title == null || title.trim().isEmpty() ? "未命名收藏夹" : title.trim();
+            this.mediaCount = Math.max(0, mediaCount);
+            this.cover = cover == null ? "" : cover;
+        }
+    }
+
+    interface FavoriteFoldersCallback { void onResult(List<FavoriteFolder> folders, String error); }
+
     /** WBI 签名需要的两个 key。 */
     private static final class WbiKeys {
         final String imgKey;
@@ -238,6 +254,7 @@ final class BiliRepository {
 
     private final ExecutorService executor = Executors.newFixedThreadPool(3);
     private final ExecutorService imageExecutor = Executors.newFixedThreadPool(3);
+    private final ExecutorService priorityImageExecutor = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Map<String, Bitmap> imageCache = Collections.synchronizedMap(
             new LinkedHashMap<String, Bitmap>(40, 0.75f, true) {
@@ -277,6 +294,7 @@ final class BiliRepository {
     void shutdown() {
         executor.shutdownNow();
         imageExecutor.shutdownNow();
+        priorityImageExecutor.shutdownNow();
     }
 
     void loadPopular(VideosCallback callback) {
@@ -1179,6 +1197,34 @@ final class BiliRepository {
         loadFavoritesPage("", result -> callback.onResult(result.items, result.error));
     }
 
+    /** 拉取账号真实收藏夹目录，保持服务端顺序。 */
+    void loadFavoriteFolders(FavoriteFoldersCallback callback) {
+        executor.execute(() -> {
+            try {
+                String mid = BiliAuthRepository.userMid();
+                if (mid.isEmpty()) throw new IllegalStateException("not logged in");
+                JSONObject root = getJson("https://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid=" + mid);
+                int code = root.optInt("code", 0);
+                if (code != 0) throw new IllegalStateException(root.optString("message"));
+                JSONObject data = root.optJSONObject("data");
+                JSONArray list = data == null ? null : data.optJSONArray("list");
+                List<FavoriteFolder> folders = new ArrayList<>();
+                if (list != null) for (int i = 0; i < list.length(); i++) {
+                    JSONObject item = list.optJSONObject(i);
+                    if (item == null) continue;
+                    long id = item.optLong("id", 0);
+                    if (id <= 0) continue;
+                    folders.add(new FavoriteFolder(id, item.optString("title"),
+                            item.optInt("media_count", 0), normalizeImage(item.optString("cover"))));
+                }
+                if (folders.isEmpty()) throw new IllegalStateException("no folder");
+                main.post(() -> callback.onResult(folders, null));
+            } catch (Exception error) {
+                main.post(() -> callback.onResult(new ArrayList<>(), "收藏夹目录加载失败，请确认账号已登录"));
+            }
+        });
+    }
+
     /**
      * 默认收藏夹分页。cursor 为本页页码（空/非法视为第 1 页）；
      * nextCursor 仅在满页（>=24 条）时给出下一页页码，否则为空（没有下一页）。
@@ -1200,6 +1246,36 @@ final class BiliRepository {
                 main.post(() -> callback.onResult(new PageResult(items, nextCursor, null)));
             } catch (Exception e) {
                 main.post(() -> callback.onResult(PageResult.empty("收藏加载失败，请确认账号已登录")));
+            }
+        });
+    }
+
+    /** 指定收藏夹分页；供收藏页目录切换使用。 */
+    void loadFavoritesPage(long mediaId, String cursor, PageCallback callback) {
+        loadFavoritesPage(mediaId, cursor, "mtime", false, callback);
+    }
+
+    /** 指定收藏夹、排序和有效性筛选分页。order 支持 mtime（最近收藏）/view（最多播放）。 */
+    void loadFavoritesPage(long mediaId, String cursor, String order, boolean availableOnly,
+                           PageCallback callback) {
+        if (mediaId <= 0) {
+            main.post(() -> callback.onResult(PageResult.empty("收藏夹不存在")));
+            return;
+        }
+        executor.execute(() -> {
+            try {
+                int pn = parsePositiveInt(cursor, 1);
+                String safeOrder = "view".equals(order) ? "view" : "mtime";
+                JSONObject root = getJson("https://api.bilibili.com/x/v3/fav/resource/list?media_id=" + mediaId
+                        + "&ps=24&pn=" + pn + "&order=" + safeOrder + "&type=0&tid=0&platform=web");
+                int code = root.optInt("code", 0);
+                if (code != 0) throw new IllegalStateException(root.optString("message"));
+                JSONObject data = root.optJSONObject("data");
+                List<VideoItem> items = parseFavoriteMedias(data == null ? null : data.optJSONArray("medias"), availableOnly);
+                String nextCursor = items.size() >= 24 ? String.valueOf(pn + 1) : "";
+                main.post(() -> callback.onResult(new PageResult(items, nextCursor, null)));
+            } catch (Exception error) {
+                main.post(() -> callback.onResult(PageResult.empty("收藏视频加载失败，请稍后重试")));
             }
         });
     }
@@ -1347,16 +1423,22 @@ final class BiliRepository {
     }
 
     private List<VideoItem> parseFavoriteMedias(JSONArray list) {
+        return parseFavoriteMedias(list, false);
+    }
+
+    private List<VideoItem> parseFavoriteMedias(JSONArray list, boolean availableOnly) {
         List<VideoItem> output = new ArrayList<>();
         if (list == null) return output;
         for (int i = 0; i < list.length(); i++) {
             JSONObject item = list.optJSONObject(i);
             if (item == null) continue;
+            String title = item.optString("title", "收藏视频");
+            if (availableOnly && (title.contains("已失效") || item.optInt("attr", 0) == 9)) continue;
             JSONObject upper = item.optJSONObject("upper");
             JSONObject count = item.optJSONObject("cnt_info");
             String bvid = item.optString("bvid");
             if (bvid.isEmpty()) continue;
-            output.add(new VideoItem(item.optString("title", "收藏视频"), upper == null ? "哔哩哔哩" : upper.optString("name"),
+            output.add(new VideoItem(title, upper == null ? "哔哩哔哩" : upper.optString("name"),
                     compact(count == null ? 0 : count.optLong("play")) + "观看", formatDuration(item.optInt("duration")),
                     normalizeImage(item.optString("cover")), "https://www.bilibili.com/video/" + bvid,
                     "", formatShortDate(item.optLong("fav_time", 0)), "personal_favorite"));
@@ -1437,9 +1519,18 @@ final class BiliRepository {
     }
 
     void loadImage(String url, ImageCallback callback) {
+        loadImageOnExecutor(url, callback, imageExecutor);
+    }
+
+    /** 账号头像/头图不排在几十张视频封面之后，保证资料头先完成。 */
+    void loadPriorityImage(String url, ImageCallback callback) {
+        loadImageOnExecutor(url, callback, priorityImageExecutor);
+    }
+
+    private void loadImageOnExecutor(String url, ImageCallback callback, ExecutorService targetExecutor) {
         Bitmap cached = imageCache.get(url);
         if (cached != null) { callback.onResult(cached); return; }
-        imageExecutor.execute(() -> {
+        targetExecutor.execute(() -> {
             Bitmap bitmap = null;
             HttpURLConnection connection = null;
             try {
